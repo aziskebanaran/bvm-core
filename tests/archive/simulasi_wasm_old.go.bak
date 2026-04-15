@@ -1,0 +1,218 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"bvm.core/pkg/storage"
+	"bvm.core/x"
+	"bvm.core/x/bvm/types"
+	banktypes "bvm.core/x/bank/types"
+	"bvm.core/x/wasm/keeper"
+)
+
+// --- MOCK SYSTEM (Versi Mirror Sempurna) ---
+type MockBank struct {
+    store storage.BVMStore
+}
+
+// 1. Keeper (Core) - SEKARANG SUDAH BISA MENULIS KE DISK
+func (m *MockBank) GetAccount(addr string) (types.Account, error) { return types.Account{}, nil }
+func (m *MockBank) SaveAccount(acc *types.Account) error          { return nil }
+
+func (m *MockBank) GetBalance(addr string, symbol string) uint64 {
+    var key string
+    if symbol == "BVM" || symbol == "" {
+        key = "a:" + addr
+    } else {
+        key = "t:" + symbol + ":" + addr
+    }
+    var bal uint64
+    _ = m.store.Get(key, &bal)
+    return bal
+}
+
+func (m *MockBank) AddBalance(addr string, amount uint64, symbol string) {
+    current := m.GetBalance(addr, symbol)
+    key := "t:" + symbol + ":" + addr
+    if symbol == "BVM" || symbol == "" { key = "a:" + addr }
+    _ = m.store.Put(key, current + amount)
+}
+
+func (m *MockBank) SubBalance(addr string, amount uint64, symbol string) error {
+    current := m.GetBalance(addr, symbol)
+    if current < amount {
+        return fmt.Errorf("🚨 Saldo tidak cukup")
+    }
+    key := "t:" + symbol + ":" + addr
+    if symbol == "BVM" || symbol == "" { key = "a:" + addr }
+    return m.store.Put(key, current - amount)
+}
+
+// --- TAMBAHKAN METODE MINT & BURN KE MOCKBANK ---
+
+func (m *MockBank) Mint(addr string, amount uint64, symbol string) {
+    if symbol == "BVM" || symbol == "" { return }
+    current := m.GetBalance(addr, symbol)
+    key := "t:" + symbol + ":" + addr
+    _ = m.store.Put(key, current + amount)
+}
+
+func (m *MockBank) Burn(addr string, amount uint64, symbol string) error {
+    if symbol == "BVM" || symbol == "" { return nil }
+    current := m.GetBalance(addr, symbol)
+    if current < amount {
+        return fmt.Errorf("🚨 Saldo %s tidak cukup untuk burn", symbol)
+    }
+    key := "t:" + symbol + ":" + addr
+    return m.store.Put(key, current - amount)
+}
+
+
+// 2. In
+func (m *MockBank) HoldForMempool(tx types.Transaction) error      { return nil }
+func (m *MockBank) ReleaseFromMempool(tx types.Transaction)        {}
+func (m *MockBank) ValidateSend(tx types.Transaction) error        { return nil }
+func (m *MockBank) GetOrCreateAccount(addr string) *types.Account  { return &types.Account{} }
+func (m *MockBank) IsFrozen(symbol string) bool                    { return false }
+
+// 3. Out
+func (m *MockBank) Transfer(tx types.Transaction) error            { return nil }
+func (m *MockBank) FinalizeTransaction(tx types.Transaction, minerAddr string, params *types.Params) {}
+func (m *MockBank) CreateToken(owner string, symbol string, mintFee uint64) error {
+    return nil
+}
+// Di dalam MockBank Sultan
+func (m *MockBank) GetTokenMetadata(symbol string) (banktypes.TokenMetadata, bool) {
+    // Kita buat metadata palsu agar simulasi lancar
+    return banktypes.TokenMetadata{
+        Symbol: symbol, 
+        Owner: "SULTAN_HOKI_88",
+        MintFee: 10,
+    }, true
+}
+
+func (m *MockBank) SetTokenMetadata(md banktypes.TokenMetadata) error {
+    return nil
+}
+
+
+// 4. Audit & Admin
+func (m *MockBank) CheckSupplyIntegrity(symbol string)             {}
+func (m *MockBank) CalculateBalanceManual(bc *types.Blockchain, addr string, symbol string) uint64 { return 0 }
+func (m *MockBank) FreezeToken(caller string, symbol string) error   { return nil }
+func (m *MockBank) UnfreezeToken(caller string, symbol string) error { return nil }
+func (m *MockBank) ScanTotalSupplyFromDB(symbol string) uint64       { return 0 }
+
+// 5. Querier
+func (m *MockBank) SearchAccount(address string) (map[string]interface{}, bool) { return nil, false }
+func (m *MockBank) GetAllBalances() map[string]map[string]uint64               { return nil }
+func (m *MockBank) LoadAllAccountsFromDB() int                                 { return 0 }
+func (m *MockBank) GetPublicKeyFromLedger(bc *types.Blockchain, address string) string { return "" }
+
+
+type MockBVM struct {
+        bank *MockBank
+}
+
+// Implementasi BVMKeeper Sultan
+func (m *MockBVM) GetLatestBlock() types.Block { return types.Block{} }
+func (m *MockBVM) GetLastBlockHash() string { return "" }
+func (m *MockBVM) GetLastHeight() int { return 0 }
+func (m *MockBVM) ProcessTransaction(tx types.Transaction) error { return nil }
+func (m *MockBVM) GetSecureBalance(address string) (types.WalletState, bool) { return types.WalletState{}, false }
+func (m *MockBVM) SearchAccount(query string) (interface{}, bool) { return nil, false }
+func (m *MockBVM) GetNextNonce(address string) uint64 { return 0 }
+func (m *MockBVM) GetParams() x.ParamsKeeper { return nil }
+func (m *MockBVM) GetParamsData() types.Params { return types.Params{} }
+func (m *MockBVM) GetDynamicFee(mempoolSize int) uint64 { return 0 }
+func (m *MockBVM) GetNextDifficultyForMiner(minerAddr string) int { return 1 }
+func (m *MockBVM) CalculateAvgBlockTime() int64 { return 0 }
+func (m *MockBVM) GetNextDifficulty() int { return 1 }
+func (m *MockBVM) PrepareNewWork(minerAddr string, minerName string) (types.Block, error) { return types.Block{}, nil }
+func (m *MockBVM) SolveBlockLogic(block *types.Block, quit chan bool) bool { return true }
+func (m *MockBVM) SubmitMinedBlock(block types.Block) error { return nil }
+func (m *MockBVM) GetDifficulty() int { return 1 }
+func (m *MockBVM) SetDifficulty(newDiff int) {}
+func (m *MockBVM) ProcessBlock(newBlock types.Block) error { return nil }
+func (m *MockBVM) ValidateConsensus(newBlock types.Block) error { return nil }
+func (m *MockBVM) ValidateBlockTransactions(block types.Block) error { return nil }
+func (m *MockBVM) VerifyBlock(newBlock types.Block) bool { return true }
+func (m *MockBVM) ExecuteBlock(block types.Block) error { return nil }
+func (m *MockBVM) CommitBlock(block types.Block) error { return nil }
+func (m *MockBVM) DistributeBlockReward(height int64, fees uint64) (uint64, uint64, error) { return 0, 0, nil }
+func (m *MockBVM) GetSubsidiAtHeight(height int64) uint64 { return 0 }
+func (m *MockBVM) GetCurrentReward(height int64) uint64 { return 0 }
+func (m *MockBVM) GetInflationStats() (string, int64) { return "", 0 }
+func (m *MockBVM) ValidateWithAI() (int, string) { return 0, "" }
+func (m *MockBVM) AutoRecoverDatabase() {}
+func (m *MockBVM) SyncState() uint64 { return 0 }
+func (m *MockBVM) GetBalanceBVM(addr string) uint64 { return 0 }
+func (m *MockBVM) AddBalanceBVM(addr string, amount uint64) error { return nil }
+func (m *MockBVM) SubBalanceBVM(addr string, amount uint64) error { return nil }
+func (m *MockBVM) GetBank() x.BankKeeper { return m.bank }
+func (m *MockBVM) GetAuth() x.AuthKeeper { return nil }
+func (m *MockBVM) GetNonce() x.NonceKeeper { return nil }
+func (m *MockBVM) GetStatus() types.NodeStatus { return types.NodeStatus{} }
+func (m *MockBVM) GetChain() []types.Block { return nil }
+func (m *MockBVM) GetMempool() x.MempoolKeeper { return nil }
+func (m *MockBVM) GetStaking() x.StakingKeeper { return nil }
+func (m *MockBVM) GetP2P() x.P2PKeeper { return nil }
+func (m *MockBVM) GetWasm() x.WasmKeeper { return nil }
+func (m *MockBVM) GetPendingTransactions() []types.Transaction { return nil }
+
+func main() {
+	os.RemoveAll("./data/test_db")
+	store, _ := storage.NewLevelDBStore("./data/test_db")
+	wasmK := keeper.NewKeeper(store)
+
+	// --- 1. SUNTIK MULTI-TOKEN (STATE AWAL) ---
+	addrSultan := "SULTAN_HOKI_88"
+	addrReseller := "RESELLER_SETIA"
+
+	// Saldo awal Sultan: 5000 BVM (Native) dan 1000 GOLD (Token)
+	store.Put("a:"+addrSultan, uint64(5000))
+	store.Put("t:GOLD:"+addrSultan, uint64(1000)) 
+
+	fmt.Printf("💰 [STATE] Sultan: 5000 BVM, 1000 GOLD | Reseller: 0 GOLD\n")
+
+	mockBank := &MockBank{store: store}
+	mockBVM := &MockBVM{bank: mockBank}
+	wasmK.SetBVM(mockBVM)
+
+// --- 2. SINKRONISASI SDK (READ FROM FILE) ---
+fmt.Println("🔍 Membaca Kontrak dari Hasil Pabrik (Makefile)...")
+
+// Kita deklarasikan bytecode dan errRead sekaligus
+bytecode, errRead := os.ReadFile("contracts/test_contract/contract.wasm")
+if errRead != nil {
+    fmt.Printf("❌ Gagal membaca file WASM: %v\n", errRead)
+    return
+}
+
+fmt.Printf("✅ Kontrak Dimuat! Ukuran: %d bytes\n", len(bytecode))
+
+
+	// --- 3. EKSEKUSI KONTRAK ---
+	addrContract, _ := wasmK.DeployContract("transfer_service", bytecode)
+	fmt.Println("⏳ Smart Contract: Memproses pengiriman 500 GOLD ke Reseller...")
+
+	// Kita kirim payload alamat pengirim sebagai pemicu
+	err := wasmK.ExecuteContract(addrContract, "transfer_service", []byte(addrSultan))
+
+	if err != nil {
+		fmt.Printf("❌ Error Eksekusi: %v\n", err)
+	} else {
+		// --- 4. VERIFIKASI AKHIR (BUKTI NYATA) ---
+		// Kita cek langsung ke database/mockBank apakah saldo sudah berpindah
+		finalSultan := mockBank.GetBalance(addrSultan, "GOLD")
+		finalReseller := mockBank.GetBalance(addrReseller, "GOLD")
+
+		fmt.Printf("\n📊 --- LAPORAN KEUANGAN BVM ---\n")
+		fmt.Printf("👑 Sultan GOLD   : %d\n", finalSultan)
+		fmt.Printf("🤝 Reseller GOLD : %d\n", finalReseller)
+
+		if finalReseller == 500 {
+			fmt.Println("\n✅ STATUS: TRANSFER MULTI-TOKEN BERHASIL!")
+		}
+	}
+}

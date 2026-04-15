@@ -1,0 +1,12 @@
+# Binari
+bvm
+bvm-wallet
+
+# Database & Data Sensitif
+data/
+node_wallet.json
+*.db
+*.log
+
+# Keamanan
+.env
