@@ -1,7 +1,7 @@
 package mempool
 
 import (
-	"github.com/aziskebanaran/BVM.core/x/bvm/types"
+	"github.com/aziskebanaran/bvm-core/x/bvm/types"
     "sync"
     "fmt"
 )

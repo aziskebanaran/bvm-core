@@ -1,8 +1,8 @@
 package migrate 
 
 import (
-	"github.com/aziskebanaran/BVM.core/pkg/storage"
-	"github.com/aziskebanaran/BVM.core/x/bvm/types"
+	"github.com/aziskebanaran/bvm-core/pkg/storage"
+	"github.com/aziskebanaran/bvm-core/x/bvm/types"
 	"encoding/json"
 	"fmt"
 	"os" // GUNAKAN OS SEBAGAI PENGGANTI IOUTIL

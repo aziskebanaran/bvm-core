@@ -1,9 +1,9 @@
 package keeper
 
 import (
-	"github.com/aziskebanaran/BVM.core/pkg/storage"
-	"github.com/aziskebanaran/BVM.core/x"
-	"github.com/aziskebanaran/BVM.core/x/storage/types"
+	"github.com/aziskebanaran/bvm-core/pkg/storage"
+	"github.com/aziskebanaran/bvm-core/x"
+	"github.com/aziskebanaran/bvm-core/x/storage/types"
 	"fmt"
 	"io/ioutil"
 	"os"

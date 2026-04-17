@@ -6,20 +6,20 @@ import (
 	"context"
 	"time"
 
-	"github.com/aziskebanaran/BVM.core/pkg/logger"
-	"github.com/aziskebanaran/BVM.core/pkg/nonce"
-	"github.com/aziskebanaran/BVM.core/pkg/p2p"
-	"github.com/aziskebanaran/BVM.core/pkg/storage"
-	"github.com/aziskebanaran/BVM.core/x" // 🚩 Penting untuk interface
-	authkeeper "github.com/aziskebanaran/BVM.core/x/auth/keeper"
-	bankkeeper "github.com/aziskebanaran/BVM.core/x/bank/keeper"
-	bvmkeeper "github.com/aziskebanaran/BVM.core/x/bvm/keeper"
-	"github.com/aziskebanaran/BVM.core/x/bvm/types"
-	"github.com/aziskebanaran/BVM.core/x/mempool"
-	"github.com/aziskebanaran/BVM.core/x/miner"
-	stakingkeeper "github.com/aziskebanaran/BVM.core/x/staking/keeper"
-	wasmkeeper "github.com/aziskebanaran/BVM.core/x/wasm/keeper"
-        storagekeeper "github.com/aziskebanaran/BVM.core/x/storage/keeper"
+	"github.com/aziskebanaran/bvm-core/pkg/logger"
+	"github.com/aziskebanaran/bvm-core/pkg/nonce"
+	"github.com/aziskebanaran/bvm-core/pkg/p2p"
+	"github.com/aziskebanaran/bvm-core/pkg/storage"
+	"github.com/aziskebanaran/bvm-core/x" // 🚩 Penting untuk interface
+	authkeeper "github.com/aziskebanaran/bvm-core/x/auth/keeper"
+	bankkeeper "github.com/aziskebanaran/bvm-core/x/bank/keeper"
+	bvmkeeper "github.com/aziskebanaran/bvm-core/x/bvm/keeper"
+	"github.com/aziskebanaran/bvm-core/x/bvm/types"
+	"github.com/aziskebanaran/bvm-core/x/mempool"
+	"github.com/aziskebanaran/bvm-core/x/miner"
+	stakingkeeper "github.com/aziskebanaran/bvm-core/x/staking/keeper"
+	wasmkeeper "github.com/aziskebanaran/bvm-core/x/wasm/keeper"
+        storagekeeper "github.com/aziskebanaran/bvm-core/x/storage/keeper"
 )
 
 type BaseApp struct {

@@ -1,7 +1,7 @@
 package keeper
 
 import (
-    "github.com/aziskebanaran/BVM.core/x/storage/types"
+    "github.com/aziskebanaran/bvm-core/x/storage/types"
 )
 
 func (k *StorageKeeper) CheckRules(app types.AppContainer, path string, action string, callerAddr string) bool {

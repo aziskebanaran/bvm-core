@@ -1,7 +1,7 @@
 package p2p
 
 import (
-	"github.com/aziskebanaran/BVM.core/x/events"
+	"github.com/aziskebanaran/bvm-core/x/events"
 	"encoding/json"
 	"fmt"
 	"net/http"

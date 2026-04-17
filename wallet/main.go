@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/aziskebanaran/BVM.core/pkg/wallet"
-	"github.com/aziskebanaran/BVM.core/pkg/client"
-	"github.com/aziskebanaran/BVM.core/x/bvm/types"
+	"github.com/aziskebanaran/bvm-core/pkg/wallet"
+	"github.com/aziskebanaran/bvm-core/pkg/client"
+	"github.com/aziskebanaran/bvm-core/x/bvm/types"
 	"encoding/json"
 	"fmt"
 	"net/http"

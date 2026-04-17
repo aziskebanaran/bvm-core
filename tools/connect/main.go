@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"os"
 	"time"
-	"github.com/aziskebanaran/BVM.core/pkg/p2p"
-	"github.com/aziskebanaran/BVM.core/pkg/constants"
+	"github.com/aziskebanaran/bvm-core/pkg/p2p"
+	"github.com/aziskebanaran/bvm-core/pkg/constants"
 )
 
 type PeerInfo struct {

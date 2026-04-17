@@ -3,7 +3,7 @@ package p2p
 import (
 	"sync"
 	"time"
-	"github.com/aziskebanaran/BVM.core/x/bvm/types" // Import agar kenal struct Peer Sultan
+	"github.com/aziskebanaran/bvm-core/x/bvm/types" // Import agar kenal struct Peer Sultan
 )
 
 // Keeper: Sekarang P2P punya rumah resmi yang mematuhi x.P2PKeeper

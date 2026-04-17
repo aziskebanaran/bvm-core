@@ -1,10 +1,10 @@
 package keeper
 
 import (
-	"github.com/aziskebanaran/BVM.core/pkg/logger"   // 🚩 Pakai Logger Pintar
-	"github.com/aziskebanaran/BVM.core/pkg/nonce"
-	"github.com/aziskebanaran/BVM.core/pkg/storage" // 🚩 Ganti DB ke Store
-	"github.com/aziskebanaran/BVM.core/x/bvm/types"
+	"github.com/aziskebanaran/bvm-core/pkg/logger"   // 🚩 Pakai Logger Pintar
+	"github.com/aziskebanaran/bvm-core/pkg/nonce"
+	"github.com/aziskebanaran/bvm-core/pkg/storage" // 🚩 Ganti DB ke Store
+	"github.com/aziskebanaran/bvm-core/x/bvm/types"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/x509"

@@ -1,7 +1,7 @@
 package storage
 
 import (
-        "github.com/aziskebanaran/BVM.core/x/bvm/types"
+        "github.com/aziskebanaran/bvm-core/x/bvm/types"
         "fmt"
         "sort"
         "github.com/syndtr/goleveldb/leveldb"

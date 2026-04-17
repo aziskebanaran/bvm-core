@@ -5,9 +5,9 @@ import (
 	"fmt"                // 🚩 Tambahkan ini
 	"io"                 // 🚩 Tambahkan ini
 	"net/http"
-	"github.com/aziskebanaran/BVM.core/x"
-	"github.com/aziskebanaran/BVM.core/x/storage/keeper"
-	"github.com/aziskebanaran/BVM.core/x/storage/types"
+	"github.com/aziskebanaran/bvm-core/x"
+	"github.com/aziskebanaran/bvm-core/x/storage/keeper"
+	"github.com/aziskebanaran/bvm-core/x/storage/types"
 )
 
 

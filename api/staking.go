@@ -5,8 +5,8 @@ import (
     "net/http"
     "time"
     "fmt"
-    "github.com/aziskebanaran/BVM.core/x"
-	"github.com/aziskebanaran/BVM.core/x/bvm/types"
+    "github.com/aziskebanaran/bvm-core/x"
+	"github.com/aziskebanaran/bvm-core/x/bvm/types"
 )
 
 func HandleJoinValidator(k x.BVMKeeper) http.HandlerFunc {

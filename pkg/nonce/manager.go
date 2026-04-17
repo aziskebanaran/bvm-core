@@ -2,8 +2,8 @@ package nonce
 
 import (
 	"sync"
-	"github.com/aziskebanaran/BVM.core/pkg/logger"  // 🚩 Gunakan Logger Pintar
-	"github.com/aziskebanaran/BVM.core/pkg/storage"
+	"github.com/aziskebanaran/bvm-core/pkg/logger"  // 🚩 Gunakan Logger Pintar
+	"github.com/aziskebanaran/bvm-core/pkg/storage"
 )
 
 type NonceManager struct {

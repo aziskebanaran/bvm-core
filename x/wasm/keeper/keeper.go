@@ -6,9 +6,9 @@ import (
     "time"
 	"os"
     "strings"
-    "github.com/aziskebanaran/BVM.core/pkg/logger"
-    "github.com/aziskebanaran/BVM.core/pkg/storage"
-    "github.com/aziskebanaran/BVM.core/x" // 🚩 Untuk akses BVMKeeper
+    "github.com/aziskebanaran/bvm-core/pkg/logger"
+    "github.com/aziskebanaran/bvm-core/pkg/storage"
+    "github.com/aziskebanaran/bvm-core/x" // 🚩 Untuk akses BVMKeeper
     "github.com/tetratelabs/wazero"
     "github.com/tetratelabs/wazero/api"
     "github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"

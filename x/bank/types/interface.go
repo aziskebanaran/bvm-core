@@ -1,6 +1,6 @@
 package types
 
-import "github.com/aziskebanaran/BVM.core/x/bvm/types"
+import "github.com/aziskebanaran/bvm-core/x/bvm/types"
 
 type BankKeeper interface {
     // --- 1. Keeper (Core State Management) ---

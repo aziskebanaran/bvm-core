@@ -1,4 +1,4 @@
-module github.com/aziskebanaran/BVM.core
+module github.com/aziskebanaran/bvm-core
 
 go 1.25.0
 

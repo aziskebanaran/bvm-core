@@ -1,9 +1,9 @@
 package main
 
 import (
-    "github.com/aziskebanaran/BVM.core/pkg/miner" 
-    "github.com/aziskebanaran/BVM.core/pkg/wallet"
-    "github.com/aziskebanaran/BVM.core/pkg/logger"
+    "github.com/aziskebanaran/bvm-core/pkg/miner" 
+    "github.com/aziskebanaran/bvm-core/pkg/wallet"
+    "github.com/aziskebanaran/bvm-core/pkg/logger"
     "fmt"
 	"time"
 )

@@ -1,9 +1,9 @@
 package miner
 
 import (
-	"github.com/aziskebanaran/BVM.core/pkg/client"
-	"github.com/aziskebanaran/BVM.core/pkg/logger"
-	"github.com/aziskebanaran/BVM.core/x/bvm/types"
+	"github.com/aziskebanaran/bvm-core/pkg/client"
+	"github.com/aziskebanaran/bvm-core/pkg/logger"
+	"github.com/aziskebanaran/bvm-core/x/bvm/types"
 	"fmt"
 	"strings"
 	"time"

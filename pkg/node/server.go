@@ -1,10 +1,10 @@
 package node
 
 import (
-	"github.com/aziskebanaran/BVM.core/api"
-	"github.com/aziskebanaran/BVM.core/pkg/logger"
-	"github.com/aziskebanaran/BVM.core/pkg/storage"
-	"github.com/aziskebanaran/BVM.core/x" // 🚩 Impor Interface Pusat
+	"github.com/aziskebanaran/bvm-core/api"
+	"github.com/aziskebanaran/bvm-core/pkg/logger"
+	"github.com/aziskebanaran/bvm-core/pkg/storage"
+	"github.com/aziskebanaran/bvm-core/x" // 🚩 Impor Interface Pusat
 	"net/http"
 	"time"
 )

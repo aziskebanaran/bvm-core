@@ -5,8 +5,8 @@ import (
     "encoding/hex"
     "fmt"
     "time"
-    "github.com/aziskebanaran/BVM.core/x/storage/types"
-	"github.com/aziskebanaran/BVM.core/x"
+    "github.com/aziskebanaran/bvm-core/x/storage/types"
+	"github.com/aziskebanaran/bvm-core/x"
 )
 
 // GenerateAPIKey: Membuat kunci rahasia baru untuk pengembang

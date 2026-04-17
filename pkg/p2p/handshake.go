@@ -1,8 +1,8 @@
 package p2p
 
 import (
-	"github.com/aziskebanaran/BVM.core/pkg/constants"
-	"github.com/aziskebanaran/BVM.core/x/events"
+	"github.com/aziskebanaran/bvm-core/pkg/constants"
+	"github.com/aziskebanaran/bvm-core/x/events"
 )
 
 type HandshakeRequest struct {

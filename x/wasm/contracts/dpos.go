@@ -1,7 +1,7 @@
 package main
 
 import (
-    "github.com/aziskebanaran/BVM.core/pkg/sdk" // Pastikan jalurnya presisi seperti ini
+    "github.com/aziskebanaran/bvm-core/pkg/sdk" // Pastikan jalurnya presisi seperti ini
 )
 
 // Biarkan fungsi main tetap kosong karena ini persyaratan WASM

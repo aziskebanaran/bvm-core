@@ -1,9 +1,9 @@
 package api
 
 import (
-	"github.com/aziskebanaran/BVM.core/pkg/storage"
-	"github.com/aziskebanaran/BVM.core/x"
-	"github.com/aziskebanaran/BVM.core/x/bvm/types"
+	"github.com/aziskebanaran/bvm-core/pkg/storage"
+	"github.com/aziskebanaran/bvm-core/x"
+	"github.com/aziskebanaran/bvm-core/x/bvm/types"
 	"encoding/json"
 	"net/http"
 	"strconv"

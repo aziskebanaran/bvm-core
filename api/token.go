@@ -3,8 +3,8 @@ package api
 import (
     "encoding/json"
     "net/http"
-    "github.com/aziskebanaran/BVM.core/x"
-	"github.com/aziskebanaran/BVM.core/x/bvm/types"
+    "github.com/aziskebanaran/bvm-core/x"
+	"github.com/aziskebanaran/bvm-core/x/bvm/types"
 	"time"
 )
 

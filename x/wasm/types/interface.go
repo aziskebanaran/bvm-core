@@ -1,7 +1,7 @@
 package types
 
 import (
-    "github.com/aziskebanaran/BVM.core/pkg/storage" // 🚩 Tambahkan ini!
+    "github.com/aziskebanaran/bvm-core/pkg/storage" // 🚩 Tambahkan ini!
 )
 
 // WasmKeeper: Antarmuka utama untuk mesin Smart Contract
