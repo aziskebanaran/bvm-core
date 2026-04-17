@@ -2,7 +2,7 @@ package keeper
 
 import (
         "fmt"
-        "bvm.core/x/bvm/types"
+        "github.com/aziskebanaran/BVM.core/x/bvm/types"
 )
 
 func (k *BankKeeper) ValidateSend(tx types.Transaction) error {

@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"bvm.core/pkg/storage"
+	"github.com/aziskebanaran/BVM.core/pkg/storage"
 )
 
 func main() {

@@ -1,9 +1,9 @@
 package validator
 
 import (
-	"bvm.core/pkg/logger"
-    "bvm.core/x/bvm/keeper" // 👈 Import keeper langsung
-    "bvm.core/x/bvm/types"
+	"github.com/aziskebanaran/BVM.core/pkg/logger"
+    "github.com/aziskebanaran/BVM.core/x/bvm/keeper" // 👈 Import keeper langsung
+    "github.com/aziskebanaran/BVM.core/x/bvm/types"
 )
 
 // Engine sekarang menggunakan pointer langsung ke Keeper (Si Jenderal)

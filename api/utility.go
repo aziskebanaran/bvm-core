@@ -1,8 +1,8 @@
 package api
 
 import (
-	"bvm.core/x"
-	"bvm.core/x/bvm/types"
+	"github.com/aziskebanaran/BVM.core/x"
+	"github.com/aziskebanaran/BVM.core/x/bvm/types"
 	"encoding/json"
 	"fmt"
 	"github.com/vmihailenco/msgpack/v5"

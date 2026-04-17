@@ -1,6 +1,6 @@
 package types
 
-import "bvm.core/x/bvm/types"
+import "github.com/aziskebanaran/BVM.core/x/bvm/types"
 
 // AuthKeeper: Intelijen & Identitas (Menteri Keamanan)
 type AuthKeeper interface {

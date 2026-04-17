@@ -1,9 +1,9 @@
 package keeper
 
 import (
-	"bvm.core/pkg/logger"
-	"bvm.core/x/bvm/types"
-	banktypes "bvm.core/x/bank/types"
+	"github.com/aziskebanaran/BVM.core/pkg/logger"
+	"github.com/aziskebanaran/BVM.core/x/bvm/types"
+	banktypes "github.com/aziskebanaran/BVM.core/x/bank/types"
 	"fmt"
 )
 

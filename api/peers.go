@@ -1,8 +1,8 @@
 package api
 
 import (
-	"bvm.core/x"
-	"bvm.core/pkg/p2p"
+	"github.com/aziskebanaran/BVM.core/x"
+	"github.com/aziskebanaran/BVM.core/pkg/p2p"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -79,7 +79,7 @@ func saveNewPeer(newIP string, nodeID string) {
 		"name":    nodeID,
 	})
 
-	// Tulis kembali ke file peers.json di folder root bvm.core/
+	// Tulis kembali ke file peers.json di folder root github.com/aziskebanaran/BVM.core/
 	newData, _ := json.MarshalIndent(peers, "", "    ")
 	os.WriteFile(peerFile, newData, 0644)
 	fmt.Printf("📝 [P2P] %s Berhasil Terdaftar secara Otomatis!\n", nodeID)

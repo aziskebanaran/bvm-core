@@ -1,9 +1,9 @@
 package api
 
 import (
-	"bvm.core/pkg/storage"
-	"bvm.core/x" // 🚩 WAJIB: Gunakan interface pusat
-	"bvm.core/x/storage/keeper"
+	"github.com/aziskebanaran/BVM.core/pkg/storage"
+	"github.com/aziskebanaran/BVM.core/x" // 🚩 WAJIB: Gunakan interface pusat
+	"github.com/aziskebanaran/BVM.core/x/storage/keeper"
 	"time"
 	"encoding/json"
 	"net/http"

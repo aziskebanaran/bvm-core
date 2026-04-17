@@ -1,12 +1,9 @@
-# Binari
-bvm
-bvm-wallet
-
-# Database & Data Sensitif
 data/
-node_wallet.json
-*.db
+*.ldb
 *.log
-
-# Keamanan
-.env
+CURRENT
+LOCK
+MANIFEST-*
+bvm
+main
+node_wallet.json

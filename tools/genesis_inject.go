@@ -4,8 +4,8 @@ import (
     "fmt"
     "log"
 
-    "bvm.core/pkg/storage"
-    staketypes "bvm.core/x/staking/types"
+    "github.com/aziskebanaran/BVM.core/pkg/storage"
+    staketypes "github.com/aziskebanaran/BVM.core/x/staking/types"
     "github.com/vmihailenco/msgpack/v5" // 🚩 Gunakan MsgPack sesuai Engine Sultan!
 )
 

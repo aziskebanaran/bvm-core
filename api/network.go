@@ -1,8 +1,8 @@
 package api
 
 import (
-    "bvm.core/x/bvm/keeper"
-    "bvm.core/x/bvm/types"
+    "github.com/aziskebanaran/BVM.core/x/bvm/keeper"
+    "github.com/aziskebanaran/BVM.core/x/bvm/types"
     "encoding/json"
     "net/http"
     "strings"

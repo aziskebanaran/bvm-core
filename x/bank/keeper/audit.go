@@ -1,8 +1,8 @@
 package keeper
 
 import (
-	"bvm.core/pkg/logger"
-	"bvm.core/x/bvm/types"
+	"github.com/aziskebanaran/BVM.core/pkg/logger"
+	"github.com/aziskebanaran/BVM.core/x/bvm/types"
 	"fmt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 )

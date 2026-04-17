@@ -2,8 +2,8 @@ package keeper
 
 import (
     "fmt" // 🚩 Tambahkan ini!
-    "bvm.core/pkg/storage"
-    "bvm.core/x/bvm/types"
+    "github.com/aziskebanaran/BVM.core/pkg/storage"
+    "github.com/aziskebanaran/BVM.core/x/bvm/types"
 )
 
 const (

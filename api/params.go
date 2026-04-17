@@ -1,12 +1,12 @@
 package api
 
 import (
-        "bvm.core/x"
+        "github.com/aziskebanaran/BVM.core/x"
         "encoding/json"
         "net/http"
 	"fmt"
 	"strings"
-	"bvm.core/pkg/logger"
+	"github.com/aziskebanaran/BVM.core/pkg/logger"
 )
 
 func HandleParams(k x.BVMKeeper) http.HandlerFunc {

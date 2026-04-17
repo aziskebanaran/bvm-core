@@ -1,14 +1,14 @@
 package x
 
 import (
-    "bvm.core/x/bvm/types"
-    "bvm.core/pkg/storage"
-    banktypes    "bvm.core/x/bank/types" 
-    stakingtypes "bvm.core/x/staking/types" 
-    mempooltypes "bvm.core/x/mempool/types"
-    wasmtypes    "bvm.core/x/wasm/types"
-    authtypes    "bvm.core/x/auth/types" 
-    storagetypes "bvm.core/x/storage/types"
+    "github.com/aziskebanaran/BVM.core/x/bvm/types"
+    "github.com/aziskebanaran/BVM.core/pkg/storage"
+    banktypes    "github.com/aziskebanaran/BVM.core/x/bank/types" 
+    stakingtypes "github.com/aziskebanaran/BVM.core/x/staking/types" 
+    mempooltypes "github.com/aziskebanaran/BVM.core/x/mempool/types"
+    wasmtypes    "github.com/aziskebanaran/BVM.core/x/wasm/types"
+    authtypes    "github.com/aziskebanaran/BVM.core/x/auth/types" 
+    storagetypes "github.com/aziskebanaran/BVM.core/x/storage/types"
 )
 
 // ParamsKeeper: Kontrak Konstitusi Ekonomi BVM

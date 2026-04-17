@@ -1,10 +1,10 @@
 package keeper
 
 import (
-    "bvm.core/pkg/storage" // 🚩 Import Store
-    "bvm.core/x"
-    staketypes "bvm.core/x/staking/types"
-    "bvm.core/x/staking"
+    "github.com/aziskebanaran/BVM.core/pkg/storage" // 🚩 Import Store
+    "github.com/aziskebanaran/BVM.core/x"
+    staketypes "github.com/aziskebanaran/BVM.core/x/staking/types"
+    "github.com/aziskebanaran/BVM.core/x/staking"
     "fmt"
     "sync"
 )

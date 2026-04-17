@@ -1,7 +1,7 @@
 package types
 
 import (
-	"bvm.core/x/bvm/types"
+	"github.com/aziskebanaran/BVM.core/x/bvm/types"
 	"context"
 )
 

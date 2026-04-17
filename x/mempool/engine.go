@@ -1,8 +1,8 @@
 package mempool
 
 import (
-    "bvm.core/x/bvm/types"
-    "bvm.core/pkg/logger"
+    "github.com/aziskebanaran/BVM.core/x/bvm/types"
+    "github.com/aziskebanaran/BVM.core/pkg/logger"
     "container/heap"
     "sync"
 	"fmt"

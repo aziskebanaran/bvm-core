@@ -1,7 +1,7 @@
 package api
 
 import (
-    "bvm.core/x"
+    "github.com/aziskebanaran/BVM.core/x"
     "encoding/json"
     "net/http"
 )

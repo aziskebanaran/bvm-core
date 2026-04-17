@@ -1,6 +1,6 @@
 package main
 
-import "bvm.core/pkg/sdk" // 🚩 Gunakan Impor Resmi
+import "github.com/aziskebanaran/BVM.core/pkg/sdk" // 🚩 Gunakan Impor Resmi
 
 //go:wasmexport handle
 func handle(fromPtr, fromSize, toPtr, toSize uint32, amount uint64, symPtr, symSize uint32) {

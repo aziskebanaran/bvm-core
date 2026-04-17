@@ -1,8 +1,8 @@
 package api
 
 import (
-	"bvm.core/x" // 🚩 Gunakan Interface Pusat
-	"bvm.core/x/bvm/types"
+	"github.com/aziskebanaran/BVM.core/x" // 🚩 Gunakan Interface Pusat
+	"github.com/aziskebanaran/BVM.core/x/bvm/types"
 	"encoding/json"
 	"net/http"
 	"time"

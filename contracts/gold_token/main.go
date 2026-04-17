@@ -1,7 +1,7 @@
 package main
 
 import (
-    "bvm.core/pkg/sdk"
+    "github.com/aziskebanaran/BVM.core/pkg/sdk"
 )
 
 //export handle

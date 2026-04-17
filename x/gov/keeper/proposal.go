@@ -2,10 +2,10 @@ package keeper
 
 import (
     "fmt"
-    "bvm.core/pkg/logger"
-    "bvm.core/x/gov/types"
-	"bvm.core/x"
-	"bvm.core/pkg/storage"
+    "github.com/aziskebanaran/BVM.core/pkg/logger"
+    "github.com/aziskebanaran/BVM.core/x/gov/types"
+	"github.com/aziskebanaran/BVM.core/x"
+	"github.com/aziskebanaran/BVM.core/pkg/storage"
 )
 
 type GovKeeper struct {

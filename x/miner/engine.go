@@ -1,8 +1,8 @@
 package miner
 
 import (
-    "bvm.core/x"
-    "bvm.core/pkg/logger"
+    "github.com/aziskebanaran/BVM.core/x"
+    "github.com/aziskebanaran/BVM.core/pkg/logger"
     "fmt"
 	"time"
 )

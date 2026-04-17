@@ -1,9 +1,9 @@
 package staking
 
 import (
-    "bvm.core/pkg/storage" // 🚩 Gunakan Store Sultan
-    "bvm.core/x"
-    "bvm.core/x/staking/types"
+    "github.com/aziskebanaran/BVM.core/pkg/storage" // 🚩 Gunakan Store Sultan
+    "github.com/aziskebanaran/BVM.core/x"
+    "github.com/aziskebanaran/BVM.core/x/staking/types"
     "fmt"
     "sync"
     "sort"

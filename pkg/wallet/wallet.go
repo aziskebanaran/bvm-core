@@ -1,9 +1,9 @@
 package wallet
 
 import (
-	"bvm.core/pkg/client" // Kabel Sakti Sultan
-	"bvm.core/pkg/logger" // Logger Berwarna
-	"bvm.core/x/bvm/types"
+	"github.com/aziskebanaran/BVM.core/pkg/client" // Kabel Sakti Sultan
+	"github.com/aziskebanaran/BVM.core/pkg/logger" // Logger Berwarna
+	"github.com/aziskebanaran/BVM.core/x/bvm/types"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
