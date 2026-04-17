@@ -63,6 +63,7 @@ type P2PKeeper interface {
 
 // 🚩 Definisikan Interface untuk Storage
 type StorageModuleKeeper interface {
+    GetAllAppData() (map[string][]byte, error)
     GetAppStore(appID string) (storage.BVMStore, error)
     GetAppMetadata(appID string) (storagetypes.AppContainer, error)
     RegisterApp(owner string, appID string, rules map[string]interface{}) (string, error)

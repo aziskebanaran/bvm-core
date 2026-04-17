@@ -12,15 +12,17 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-    "encoding/json" // Hanya untuk simpan file lokal saja
+ 	"encoding/json" // Hanya untuk simpan file lokal saja
+	"strings"
+	"github.com/tyler-smith/go-bip39"
 )
 
-// BVMWallet: Sekarang lebih ramping
 type BVMWallet struct {
-	PrivateKey string `json:"private_key"`
-	PublicKey  string `json:"public_key"`
-	Address    string `json:"address"`
-	Nonce      uint64 `json:"nonce"`
+    Mnemonic   string `json:"mnemonic,omitempty"` // 🚩 TAMBAHKAN INI
+    PrivateKey string `json:"private_key"`
+    PublicKey  string `json:"public_key"`
+    Address    string `json:"address"`
+    Nonce      uint64 `json:"nonce"`
 }
 
 // SaveWallet menyimpan wallet ke file
@@ -34,35 +36,33 @@ func SaveWallet(w *BVMWallet, filename string) error {
 
 // LoadWallet mengambil wallet dari file
 func LoadWallet(filename string) (*BVMWallet, error) {
-        data, err := os.ReadFile(filename)
-        if err != nil {
-                return nil, err
-        }
-        var w BVMWallet
-        err = json.Unmarshal(data, &w)
-        return &w, err
-}
-
-// CreateNewWallet menghasilkan dompet baru dengan format Hex
-func CreateNewWallet() (*BVMWallet, error) {
-    // 1. Ganti ke P256 (Mesin Baru Sultan)
-    privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+    data, err := os.ReadFile(filename)
     if err != nil { return nil, err }
 
-    // 2. Export ke Hex (Agar bisa disimpan di JSON)
-    privBytes, _ := x509.MarshalECPrivateKey(privKey)
-    pubBytes, _ := x509.MarshalPKIXPublicKey(&privKey.PublicKey)
+    var w BVMWallet
+    if err := json.Unmarshal(data, &w); err != nil {
+        return nil, err
+    }
 
-    // 3. Buat Address Unik
-    hash := sha256.Sum256(pubBytes)
-    address := fmt.Sprintf("bvmf%s", hex.EncodeToString(hash[:10]))
+    // 🚩 TAMBAHAN: Deteksi otomatis tipe wallet
+    if w.Mnemonic == "" {
+        fmt.Printf("⚠️  [WALLET] Dompet Legacy terdeteksi (Tanpa Mnemonic). Segera migrasi!\n")
+    }
 
-    return &BVMWallet{
-        PrivateKey: hex.EncodeToString(privBytes),
-        PublicKey:  hex.EncodeToString(pubBytes),
-        Address:    address,
-        Nonce:      0,
-    }, nil
+    return &w, nil
+}
+
+
+func CreateNewWallet() (*BVMWallet, string, error) {
+    // 1. Buat 12 kata baru
+    mnemonic, err := GenerateMnemonic()
+    if err != nil { return nil, "", err }
+
+    // 2. Turunkan wallet (Nonce otomatis 0 di dalam sini)
+    wallet, err := CreateFromMnemonic(mnemonic, 0)
+    if err != nil { return nil, "", err }
+
+    return wallet, mnemonic, nil
 }
 
 // FetchNonce: Mengambil Nonce terbaru langsung dari Kernel (AuthKeeper)
@@ -139,15 +139,15 @@ func BroadcastTransaction(c *client.BVMClient, tx types.Transaction) error {
     return nil
 }
 
-
 func LoadOrCreate(filename string) (*BVMWallet, error) {
-    // 1. Cek apakah file dompet sudah ada
+    // 1. Jika file sudah ada, pakai yang lama (Legacy Wallet)
     if _, err := os.Stat(filename); err == nil {
         return LoadWallet(filename)
     }
 
-    // 2. Jika tidak ada, buat baru
-    newW, err := CreateNewWallet()
+    // 2. Jika tidak ada, buat baru (Mnemonic Wallet)
+    // 🚩 PERHATIKAN: Sekarang kita tangkap mnemonic-nya
+    newW, mnemonic, err := CreateNewWallet() 
     if err != nil {
         return nil, err
     }
@@ -158,6 +158,86 @@ func LoadOrCreate(filename string) (*BVMWallet, error) {
         return nil, err
     }
 
-    fmt.Printf("🆕 [WALLET] Membuat dompet baru: %s\n", newW.Address)
+    fmt.Printf("🆕 [WALLET] Dompet Baru Terpahat: %s\n", newW.Address)
+    fmt.Printf("⚠️  MNEMONIC: %s\n", mnemonic) // Tampilkan sekali saat pembuatan
     return newW, nil
+}
+
+func CreateFromMnemonic(mnemonic string, index int) (*BVMWallet, error) {
+    // 1. Validasi Mnemonic
+    if !bip39.IsMnemonicValid(mnemonic) {
+        return nil, fmt.Errorf("mnemonic tidak valid")
+    }
+
+    // 2. Generate Seed (Seed adalah akar dari pohon kunci Sultan)
+    seed := bip39.NewSeed(mnemonic, "") 
+
+    // 3. Derivasi Kunci (Deterministic)
+    // Menggunakan SHA256 agar Mnemonic + Index selalu menghasilkan Private Key yang sama
+    combined := append(seed, []byte(fmt.Sprintf("%d", index))...)
+    hashPriv := sha256.Sum256(combined)
+
+    // 4. Bangkitkan Kunci P256
+    privKey, _ := ecdsa.GenerateKey(elliptic.P256(), strings.NewReader(string(hashPriv[:])))
+
+    privBytes, _ := x509.MarshalECPrivateKey(privKey)
+    pubBytes, _ := x509.MarshalPKIXPublicKey(&privKey.PublicKey)
+
+    // 5. Buat Address Unik bvmf...
+    hash := sha256.Sum256(pubBytes)
+    address := fmt.Sprintf("bvmf%s", hex.EncodeToString(hash[:10]))
+
+    // 🚩 KEMBALIKAN STRUCT LENGKAP
+    return &BVMWallet{
+        Mnemonic:   mnemonic,               // Simpan mnemoniknya
+        PrivateKey: hex.EncodeToString(privBytes),
+        PublicKey:  hex.EncodeToString(pubBytes),
+        Address:    address,
+        Nonce:      0,                      // Inisialisasi Nonce ke nol
+    }, nil
+}
+
+
+// GenerateMnemonic: Menciptakan 12 kata rahasia baru untuk User
+func GenerateMnemonic() (string, error) {
+    // 1. Buat entropy (kerandoman) 128-bit untuk 12 kata
+    entropy, err := bip39.NewEntropy(128)
+    if err != nil {
+        return "", err
+    }
+
+    // 2. Ubah biner menjadi kata-kata manusia
+    return bip39.NewMnemonic(entropy)
+}
+
+// SignAndPackCustom: Menggunakan "pabrik" NewRegisterTransaction agar standar
+func (w *BVMWallet) SignAndPackCustom(c *client.BVMClient, username string) (types.Transaction, error) {
+    // 1. Ambil Info Jaringan & State Nonce
+    info, err := c.GetNetworkInfo()
+    if err != nil { return types.Transaction{}, err }
+    
+    state, err := c.GetSecureState(w.Address)
+    if err != nil { return types.Transaction{}, err }
+
+    // 2. RAKIT MENGGUNAKAN STANDAR SULTAN (Fungsi 3 di types/transaction.go)
+    // Fungsi ini otomatis mengisi: To="SYSTEM_AUTH", Type="user_register", Payload, dll.
+    tx := types.NewRegisterTransaction(w.Address, username, info.DynamicFee, state.Nonce)
+
+    // 3. Tambahkan Kunci Publik (Wajib untuk Verifikasi Signature di Kernel)
+    tx.PublicKey = w.PublicKey
+    
+    // Update ID karena ada tambahan PublicKey dalam perhitungan Hash
+    tx.ID = tx.GenerateID()
+
+    // 4. PROSES TANDA TANGAN (ASN1 P256)
+    hashBytes, _ := tx.CalculateHash()
+    privBytes, _ := hex.DecodeString(w.PrivateKey)
+    rawPriv, _ := x509.ParseECPrivateKey(privBytes)
+
+    sig, err := ecdsa.SignASN1(rand.Reader, rawPriv, hashBytes)
+    if err != nil { return tx, err }
+
+    tx.Signature = hex.EncodeToString(sig)
+
+    return tx, nil
 }

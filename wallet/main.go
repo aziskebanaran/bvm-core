@@ -35,17 +35,59 @@ func main() {
 	}
 
 	switch command {
-	case "create":
-		newWallet, err := wallet.CreateNewWallet()
-		if err != nil {
-			fmt.Println("❌ Gagal membuat wallet:", err)
-			return
-		}
-		walletPath := "../node_wallet.json"
-		if err := wallet.SaveWallet(newWallet, walletPath); err != nil {
-			wallet.SaveWallet(newWallet, "node_wallet.json")
-		}
-		fmt.Printf("✨ Wallet baru tercipta!\n👤 Address: %s\n", newWallet.Address)
+        case "create":
+                // 🚩 SINKRONISASI: Tangkap 3 nilai (Wallet, Mnemonic, Error)
+                newWallet, mnemonic, err := wallet.CreateNewWallet()
+                if err != nil {
+                        fmt.Println("❌ Gagal membuat wallet:", err)
+                        return
+                }
+
+                walletPath := "../node_wallet.json"
+                // Coba simpan di folder parent, jika gagal simpan di folder lokal
+                if err := wallet.SaveWallet(newWallet, walletPath); err != nil {
+                        wallet.SaveWallet(newWallet, "node_wallet.json")
+                        walletPath = "node_wallet.json"
+                }
+
+                fmt.Println("--------------------------------------------------")
+                fmt.Printf("✨ WALLET BERHASIL DIPAHAT!\n")
+                fmt.Printf("👤 ADDRESS  : %s\n", newWallet.Address)
+                fmt.Printf("📂 DISIMPAN : %s\n", walletPath)
+                fmt.Println("--------------------------------------------------")
+                fmt.Println("⚠️  CATAT & SIMPAN 12 KATA RAHASIA INI:")
+                fmt.Printf("🔑 %s\n", mnemonic)
+                fmt.Println("--------------------------------------------------")
+                fmt.Println("NB: Mnemonic adalah satu-satunya cara memulihkan saldo emas Anda!")
+
+
+
+case "register":
+    if len(os.Args) < 3 {
+        fmt.Println("💡 Gunakan: register [USERNAME]")
+        return
+    }
+    username := os.Args[2]
+    walletFile := getWalletPath()
+    senderWallet, _ := wallet.LoadWallet(walletFile)
+
+    // 1. Ambil data jaringan untuk Nonce & Fee
+    state, _ := bvm.GetSecureState(senderWallet.Address)
+
+    // 2. Gunakan fungsi konstruktor yang kita buat di x/bvm/types tadi
+    // Kita anggap fee registrasi adalah 1 BVM (atau sesuaikan)
+    regTx := types.NewRegisterTransaction(senderWallet.Address, username, 100000000, state.Nonce)
+
+    // 3. Tanda tangani
+    // (Gunakan logika signing yang sama dengan 'send')
+    // Lalu broadcast
+    txID, err := bvm.BroadcastTX(regTx)
+    if err != nil {
+        fmt.Println("❌ Gagal Daftar:", err)
+        return
+    }
+    fmt.Printf("✅ Permintaan Registrasi Terkirim! TXID: %s\n", txID)
+
 
 case "check":
     walletFile := getWalletPath()
@@ -92,55 +134,61 @@ case "check":
 
 
                 // 1. Parsing Float dari Input
-                amountFloat, _ := strconv.ParseFloat(amountStr, 64)
-                if toAddr == "" || amountFloat <= 0 {
-                        fmt.Println("❌ Format salah! Contoh: send bvmf123 50")
-                        return
-                }
 
-		   // 🚩 PERBAIKAN: Konversi ke Atomic menggunakan angka statis atau Params
-	        amountAtomic := uint64(amountFloat * 1e8) // 100.000.000
+    amountFloat, _ := strconv.ParseFloat(amountStr, 64)
+    if toAddr == "" || amountFloat <= 0 {
+        fmt.Println("❌ Format salah!")
+        return
+    }
 
-	        walletFile := getWalletPath()
-	        senderWallet, err := wallet.LoadWallet(walletFile)
+    walletFile := getWalletPath()
+    senderWallet, err := wallet.LoadWallet(walletFile)
+    if err != nil {
+        fmt.Println("❌ Dompet tidak ditemukan"); return
+    }
 
-		    // 🚩 SINKRONISASI NONCE: Jangan pakai nonce dari file lokal, tanya Node!
-	        state, _ := bvm.GetSecureState(senderWallet.Address)
-	        senderWallet.Nonce = state.Nonce 
+    // 🚩 PERBAIKAN: Ambil Params dari Node agar konversi Atomic akurat
+    info, err := bvm.GetNetworkInfo()
+    if err != nil {
+        fmt.Println("❌ Gagal terhubung ke Node"); return
+    }
 
-	        fmt.Printf("🛰️  Menandatangani Transaksi (Nonce: %d)...\n", senderWallet.Nonce)
-	        signedTx, err := senderWallet.SignAndPack(bvm, toAddr, amountAtomic, "BVM", "Transfer via BVM-Wallet")
+    // Gunakan fungsi bawaan Sultan: ToAtomic
+    amountAtomic := info.Params.ToAtomic(fmt.Sprintf("%.8f", amountFloat))
 
+    // 🚩 PERBAIKAN: JANGAN set senderWallet.Nonce secara manual di sini!
+    // Biarkan SignAndPack yang menghitung (State + Mempool) agar tidak bentrok.
 
-                // 3. KIRIM KE JARINGAN
-                fmt.Printf("🚀 Mengirim %.8f BVM ke %s...\n", amountFloat, toAddr)
+    fmt.Printf("🛰️  Menyiapkan Transaksi untuk %s...\n", toAddr)
+    signedTx, err := senderWallet.SignAndPack(bvm, toAddr, amountAtomic, "BVM", "Transfer via BVM-Wallet")
+    if err != nil {
+        fmt.Printf("❌ Gagal Sign: %v\n", err)
+        return
+    }
 
-                txID, err := bvm.BroadcastTX(signedTx)
-                if err != nil {
-                    fmt.Printf("❌ Jaringan Menolak: %v\n", err)
-                    return
-                }
+    fmt.Printf("🚀 Mengirim %.8f BVM ke %s...\n", amountFloat, toAddr)
+    txID, err := bvm.BroadcastTX(signedTx)
+    if err != nil {
+        fmt.Printf("❌ Jaringan Menolak: %v\n", err)
+        return
+    }
 
-                wallet.SaveWallet(senderWallet, walletFile)
+    // Simpan wallet (untuk update Nonce lokal jika perlu)
+    wallet.SaveWallet(senderWallet, walletFile)
 
-                fmt.Println("--------------------------------------------------")
-                fmt.Printf("✅ BERHASIL! Transaksi Sah Telah Terkirim.\n")
-                fmt.Printf("🎫 TX ID     : %s\n", txID)
-                fmt.Printf("🔢 New Nonce : %d\n", senderWallet.Nonce)
-                fmt.Println("--------------------------------------------------")
+    fmt.Println("--------------------------------------------------")
+    fmt.Printf("✅ BERHASIL! TX ID: %s\n", txID)
+    fmt.Println("--------------------------------------------------")
 
-
-	}
-
-
+  }
 }
 
 
 func getHistory(address string) {
+    // 🚩 Tips: Gunakan endpoint yang sudah kita rapikan di API
     resp, err := http.Get(CORE_URL + "/api/history?address=" + address)
     if err != nil || resp.StatusCode != 200 {
-        fmt.Println("⚠️ Gagal mengambil riwayat dari server.")
-        return
+        fmt.Println("⚠️ Gagal mengambil riwayat."); return
     }
     defer resp.Body.Close()
 
@@ -150,42 +198,36 @@ func getHistory(address string) {
         Tx     types.Transaction `json:"tx"`
     }
 
-    if err := json.NewDecoder(resp.Body).Decode(&history); err != nil {
-        return
-    }
-
-    // PENGAMAN 1: Cek jika riwayat kosong
+    if err := json.NewDecoder(resp.Body).Decode(&history); err != nil { return }
     if len(history) == 0 {
-        fmt.Println("\n📭 Belum ada riwayat transaksi untuk alamat ini.")
-        return
+        fmt.Println("\n📭 Belum ada riwayat transaksi."); return
     }
 
     fmt.Println("\n📜 RIWAYAT TRANSAKSI TERAKHIR:")
 
-    // PENGAMAN 2: Batasi tampilan maksimal 10 transaksi saja
-    limit := 10
-    if len(history) < limit {
-        limit = len(history)
-    }
+    for i := 0; i < len(history) && i < 10; i++ {
+        entry := history[i]
 
-for i := 0; i < limit; i++ {
-    entry := history[i]
+        // 🚩 Gunakan logika konversi yang aman
+        displayAmount := float64(entry.Tx.Amount) / 1e8 
 
-    // Konversi atomic ke float hanya untuk tampilan riwayat
-    displayAmount := float64(entry.Tx.Amount) / 100000000.0
+        // Tentukan apakah ini IN (Masuk) atau OUT (Keluar)
+        icon := "📥"
+        if entry.Tx.From == address { icon = "📤" }
 
-    toAddr := entry.Tx.To
-        // PENGAMAN 3: Cek panjang alamat sebelum di-slice [:10] agar tidak PANIC
-        displayAddr := toAddr
-        if len(toAddr) > 10 {
-            displayAddr = toAddr[:10] + "..."
+        displayAddr := entry.Tx.To
+        if entry.Tx.From == address {
+            displayAddr = entry.Tx.To
+        } else {
+            displayAddr = entry.Tx.From
         }
 
-    fmt.Printf("[%d] %-13s -> %12.8f BVM (%s)\n",
-        entry.Height,
-        displayAddr,
-        displayAmount, // 🚩 Sekarang sudah benar tampilannya
-        time.Unix(entry.Time, 0).Format("15:04"))
-
+        fmt.Printf("%s [%d] %-12s: %.8f BVM (%s)\n",
+            icon,
+            entry.Height,
+            displayAddr[:12], // Potong address agar rapi
+            displayAmount,
+            time.Unix(entry.Time, 0).Format("02 Jan 15:04"),
+        )
     }
 }

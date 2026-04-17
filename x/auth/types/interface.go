@@ -18,4 +18,9 @@ type AuthKeeper interface {
     IncrementNonce(addr string) error
     GetNextNonce(addr string) uint64
     CheckNonceIntegrity(addr string) (bool, uint64, uint64)
+
+    RegisterUser(username string, address string) error
+    GetProfile(identifier string) (types.UserProfile, error)
+    GenerateUserToken(username string, address string) (string, error)
+    VerifyManualSignature(address string, message string, signature string) bool
 }

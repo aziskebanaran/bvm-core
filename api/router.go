@@ -71,6 +71,8 @@ func NewRouter(k x.BVMKeeper, mp x.MempoolKeeper, store storage.BVMStore, nodeAd
         mux.Handle("/api/storage/put", authMiddleware(http.HandlerFunc(HandleAppPut(storageK, k))))
         mux.Handle("/api/storage/get", authMiddleware(http.HandlerFunc(HandleAppGet(storageK))))
 
+        // --- 9. IDENTITY & AUTH SYSTEM ---
+        mux.HandleFunc("/api/login", HandleLogin(k)) // Pintu masuk utama untuk JWT
 
 	// --- 5. INFO NODE (Root API) ---
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

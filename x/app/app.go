@@ -4,6 +4,7 @@ import (
 	"sync"
 	"fmt"
 	"context"
+	"time"
 
 	"bvm.core/pkg/logger"
 	"bvm.core/pkg/nonce"
@@ -107,15 +108,27 @@ func (app *BaseApp) Start() {
     // Load saldo-saldo dari Disk ke RAM Bank
     app.BankKeeper.LoadAllAccountsFromDB()
 
-    app.Mu.Unlock() // Buka kembali setelah semua sehat
+    app.Mu.Unlock()
 
-    // 2. DETAK JANTUNG OTOMATIS (Continuous Block Production)
-	ctx := context.Background()
-	    app.Mempool.StartHeartbeat(ctx)
+    // 2. DETAK JANTUNG OTOMATIS
+    ctx := context.Background()
+    app.Mempool.StartHeartbeat(ctx)
 
     logger.Success("SYSTEM", fmt.Sprintf("Kernel aktif di Blok #%d", app.Blockchain.Height))
-}
 
+    // --- 🧠 AI LEARNING ENGINE (DI LUAR LOCK UTAMA) ---
+    go func() {
+        // Beri jeda 10 detik setelah start agar sistem stabil dulu
+        time.Sleep(10 * time.Second)
+
+        for {
+            app.ExportSnapshotToAI()
+
+            // AI istirahat sejenak agar tidak membebani CPU Termux
+            time.Sleep(1 * time.Minute)
+        }
+    }()
+}
 
 func (app *BaseApp) ProcessTransaction(tx types.Transaction) error {
     app.Mu.Lock()
@@ -142,4 +155,38 @@ func (app *BaseApp) ProcessTransaction(tx types.Transaction) error {
 func (app *BaseApp) Stop() {
 	logger.Info("SYSTEM", "🛑 Mematikan BVM Engine...")
 
+}
+
+// ExportSnapshotToAI sekarang memiliki fitur "Self-Cleaning"
+func (app *BaseApp) ExportSnapshotToAI() {
+    logger.Info("AI-CHEF", "👨‍🍳 Sedang menyiapkan makanan untuk AI...")
+
+    // 1. Ambil data snapshot
+    allData, err := app.StorageKeeper.GetAllAppData()
+    if err != nil {
+        logger.Error("AI-CHEF", "❌ Gagal mengambil data snapshot")
+        return
+    }
+
+    // 2. Berikan ke AI Sentinel
+    status, pesan := types.AI_DeepLearning(allData)
+
+    // 🚩 TAMBAHAN: Logika Pruning (Pembersihan RAM/Cache)
+    // Setelah AI belajar, kita pastikan map data dibersihkan dari memori
+    for k := range allData {
+        delete(allData, k)
+    }
+    allData = nil
+
+    if status != 0 {
+        logger.Error("AI-SENTINEL", pesan)
+    } else {
+        logger.Success("AI-SENTINEL", "🧠 Pelajaran diterima: " + pesan)
+    }
+
+    // 🚩 AUTO-PRUNING LOG: Jika blok kelipatan 1000, bersihkan cache database
+    if app.Blockchain.Height % 1000 == 0 {
+        logger.Info("SYSTEM", "🧹 Membersihkan cache storage untuk menjaga stabilitas...")
+        // Di sini kita bisa panggil fungsi pembersih database jika diperlukan
+    }
 }

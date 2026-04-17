@@ -11,8 +11,7 @@ import (
 	"time"
 )
 
-
-// HandleSearchUser: Mencari data pengguna berdasarkan alamat dompet
+// HandleSearchUser: Mencari data pengguna berdasarkan Alamat atau Username
 func HandleSearchUser(k x.BVMKeeper) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Content-Type", "application/json")
@@ -23,18 +22,38 @@ func HandleSearchUser(k x.BVMKeeper) http.HandlerFunc {
             return
         }
 
-        // Menggunakan GetSecureBalance agar hasil pencarian sama akuratnya dengan pengecekan saldo
-        accountData, found := k.GetSecureBalance(query)
+        var profile interface{}
+        var err error
 
-        if !found {
+        // 🚩 LOGIKA DETEKSI: 
+        // Jika dimulai dengan 'bvmf', cari berdasarkan Alamat.
+        // Jika tidak, cari berdasarkan Username melalui AuthKeeper.
+        if len(query) >= 4 && query[:4] == "bvmf" {
+            // Cari data saldo/akun standar
+            profile, _ = k.GetSecureBalance(query)
+        } else {
+            // Cari data Profil dari Registry yang kita buat di x/auth
+            // Kita panggil GetProfile dari AuthKeeper Sultan
+            profile, err = k.GetAuth().GetProfile(query)
+            if err != nil {
+                w.WriteHeader(http.StatusNotFound)
+                json.NewEncoder(w).Encode(map[string]string{
+                    "error": fmt.Sprintf("Username @%s tidak ditemukan", query),
+                })
+                return
+            }
+        }
+
+        // Jika data kosong (untuk pencarian alamat)
+        if profile == nil {
             w.WriteHeader(http.StatusNotFound)
             json.NewEncoder(w).Encode(map[string]string{
-                "error": "Alamat dompet tidak ditemukan dalam database",
+                "error": "Data tidak ditemukan",
             })
             return
         }
 
-        json.NewEncoder(w).Encode(accountData)
+        json.NewEncoder(w).Encode(profile)
     }
 }
 
@@ -97,3 +116,41 @@ func GetLiveLocation() string {
 	return "Unknown Location (System Offline)"
 }
 
+func HandleLogin(k x.BVMKeeper) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        var req struct {
+            Username  string `json:"username"`
+            Signature string `json:"signature"`
+            Message   string `json:"message"` // Misal: "Login ke BVM Cloud pada [Timestamp]"
+        }
+
+        if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+            http.Error(w, "Format JSON Salah", 400)
+            return
+        }
+
+        // 1. Cari profil berdasarkan username
+        profile, err := k.GetAuth().GetProfile(req.Username)
+        if err != nil {
+            http.Error(w, "User belum terdaftar", 404)
+            return
+        }
+
+        // 2. VERIFIKASI TANDA TANGAN (Identity Check)
+        // Kita gunakan logika Verifikasi yang sudah ada di AuthKeeper Sultan
+        isValid := k.GetAuth().VerifyManualSignature(profile.Address, req.Message, req.Signature)
+        if !isValid {
+            http.Error(w, "Tanda tangan tidak sah! Anda bukan pemilik akun ini.", 401)
+            return
+        }
+
+        // 3. Jika sah, berikan Token
+        token, _ := k.GetAuth().GenerateUserToken(profile.Username, profile.Address)
+
+        json.NewEncoder(w).Encode(map[string]string{
+            "status": "LOGIN_SUCCESS",
+            "token":  token,
+            "type":   "Bearer",
+        })
+    }
+}

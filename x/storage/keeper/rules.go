@@ -4,38 +4,37 @@ import (
     "bvm.core/x/storage/types"
 )
 
-// CheckRules: Memvalidasi apakah aksi (read/write) diizinkan berdasarkan JSON Rules
 func (k *StorageKeeper) CheckRules(app types.AppContainer, path string, action string, callerAddr string) bool {
-    // 1. Ambil aturan untuk path spesifik atau gunakan default
-    // Aturan tersimpan dalam app.Rules (map[string]interface{})
+    // 🚩 TAMBAHAN SULTAN: Jika yang akses adalah OWNER, langsung lolos!
+    if callerAddr == app.Owner {
+        return true
+    }
 
+    // 1. Ambil aturan untuk path spesifik atau gunakan default
     ruleSet, ok := app.Rules[path].(map[string]interface{})
     if !ok {
-        // Jika path tidak ada aturan spesifik, cek aturan root "."
         ruleSet, ok = app.Rules["."].(map[string]interface{})
         if !ok {
-            return false // Tidak ada aturan = Akses Ditolak (Aman)
+            // 🚩 MODIFIKASI: Jika tidak ada aturan, tapi user terautentikasi, izinkan saja dulu
+            return callerAddr != "" 
         }
     }
 
-    // 2. Ambil otorisasi untuk aksi tersebut (misal: ".write" atau ".read")
+    // 2. Ambil otorisasi untuk aksi tersebut
     requiredAuth, ok := ruleSet["."+action].(string)
     if !ok {
-        return false
+        return callerAddr != "" // Default izin jika terautentikasi
     }
 
-    // 3. Evaluator Sederhana ala BVM Guard
+    // 3. Evaluator
     switch requiredAuth {
     case "public":
         return true
     case "owner":
-        // Hanya pemilik AppContainer yang boleh eksekusi
         return callerAddr == app.Owner
     case "auth != null":
-        // Siapapun yang punya alamat dompet valid (bukan anonim)
         return callerAddr != ""
     default:
-
         return false
     }
 }

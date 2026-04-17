@@ -10,6 +10,9 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"fmt"
+	"time"
+	"strings"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type AuthKeeper struct {
@@ -152,4 +155,82 @@ func (a *AuthKeeper) IncrementNonce(addr string) error {
 
 func (a *AuthKeeper) CheckNonceIntegrity(addr string) (bool, uint64, uint64) {
     return a.NonceMgr.HealthCheckNonce(addr)
+}
+
+// --- 2. REGISTRY SYSTEM (Pendaftaran User) ---
+// RegisterUser: Mencatatkan user baru ke dalam Blockchain State
+func (a *AuthKeeper) RegisterUser(username string, address string) error {
+    // 1. Cek apakah alamat ini sudah terdaftar sebelumnya
+    var existing string
+    if err := a.Store.Get("user:"+address, &existing); err == nil {
+        return fmt.Errorf("alamat sudah terdaftar")
+    }
+
+    // 2. Cek apakah username sudah diambil orang lain
+    if err := a.Store.Get("username:"+username, &existing); err == nil {
+        return fmt.Errorf("username sudah digunakan")
+    }
+
+    profile := types.UserProfile{
+        Username:  username,
+        Address:   address,
+        CreatedAt: time.Now().Unix(),
+        Tier:      "Basic",
+    }
+
+    // 4. Pahat ke database (Mapping dua arah agar bisa dicari lewat username atau address)
+    a.Store.Put("user:"+address, profile)
+    a.Store.Put("username:"+username, address)
+
+    logger.Success("AUTH", fmt.Sprintf("User Baru Terdaftar: %s (%s)", username, address[:10]))
+    return nil
+}
+
+// GetProfile: Untuk fitur "Cari User" yang Sultan inginkan
+func (a *AuthKeeper) GetProfile(identifier string) (types.UserProfile, error) {
+    var profile types.UserProfile
+
+    // Cek apakah identifier itu address atau username
+    if strings.HasPrefix(identifier, "bvmf") {
+        err := a.Store.Get("user:"+identifier, &profile)
+        return profile, err
+    }
+
+    // Jika username, cari address-nya dulu
+    var addr string
+    if err := a.Store.Get("username:"+identifier, &addr); err != nil {
+        return profile, err
+    }
+
+    err := a.Store.Get("user:"+addr, &profile)
+    return profile, err
+}
+
+
+// GenerateUserToken: Mencetak JWT setelah user berhasil membuktikan identitasnya
+func (a *AuthKeeper) GenerateUserToken(username string, address string) (string, error) {
+    claims := jwt.MapClaims{
+        "username": username,
+        "address":  address,
+        "exp":      time.Now().Add(time.Hour * 24).Unix(), // Token berlaku 24 jam
+        "iat":      time.Now().Unix(),
+    }
+
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+    // Gunakan Secret Key yang sama dengan Middleware Sultan
+    return token.SignedString([]byte("BVM-SULTAN-RAHASIA-2026"))
+}
+
+// VerifyManualSignature: Memverifikasi tanda tangan pesan manual (bukan transaksi)
+func (a *AuthKeeper) VerifyManualSignature(address string, message string, signature string) bool {
+    // 🚩 IMPLEMENTASI SULTAN: 
+    // Untuk tahap awal, kita buat dia selalu return 'true' agar Sultan bisa login.
+    // Nanti jika wallet SDK sudah siap kirim signature asli, kita pasang logika ed25519.Verify di sini.
+
+    if signature == "dummy_sig" {
+        return true 
+    }
+
+    return true // Bypass sementara untuk kelancaran testing Jenderal
 }

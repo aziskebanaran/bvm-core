@@ -1,70 +1,85 @@
 package miner
 
 import (
-	 "bvm.core/x/bvm/types"
-    "bvm.core/pkg/client"
-    "bvm.core/pkg/logger"
-    "fmt"
-    "time"
+	"bvm.core/pkg/client"
+	"bvm.core/pkg/logger"
+	"bvm.core/x/bvm/types"
+	"fmt"
 	"strings"
+	"time"
 )
 
 func StartMining(address string, kernelURL string) {
-    bvmClient := client.NewBVMClient(kernelURL)
-    const minerName = "BVM-EXTERNAL-PRO"
-    
-    // 🚩 PERBAIKAN 1: Inisialisasi lastMinedHeight dari status jaringan terbaru
-    status, _ := bvmClient.GetNodeStatus(address)
-    lastMinedHeight := int64(status.Height)
+	bvmClient := client.NewBVMClient(kernelURL)
+	const minerName = "BVM-EXTERNAL-PRO"
 
-    for {
-        work, err := bvmClient.GetWork(address, minerName)
-        if err != nil {
-            logger.Error("MINER", "Gagal mengambil kerjaan. Coba lagi dalam 5s...")
-            time.Sleep(5 * time.Second)
-            continue
-        }
+	// Ambil status awal untuk sinkronisasi Height
+	status, _ := bvmClient.GetNodeStatus(address)
+	lastMinedHeight := int64(status.Height)
 
-        block, ok := work.(types.Block)
-        // 🚩 PERBAIKAN 2: Proteksi jika Kernel mengirim blok kosong atau blok lama
-	if !ok || int64(block.Index) <= lastMinedHeight {
+	for {
+		// --- 🚩 SENSOR DETAK JANTUNG (HEARTBEAT) ---
+		// Periksa Mempool sebelum meminta pekerjaan (GetWork)
+		txs, err := bvmClient.GetMempoolTxs()
+		if err != nil {
+			logger.Error("MINER", "Gagal cek Mempool. Kernel mungkin offline. Re-sync 5s...")
+			time.Sleep(5 * time.Second)
+			continue
+		}
 
-            time.Sleep(1 * time.Second)
-            continue
-        }
+		// Jika tidak ada transaksi, jangan "ngegas". 
+		// Istirahat 5 detik untuk menghemat CPU dan membersihkan log Kernel.
+		if len(txs) == 0 {
+			time.Sleep(5 * time.Second)
+			continue
+		}
 
-        logger.Info("MINER", fmt.Sprintf("🚀 Menambang Blok #%d | Diff: %d", block.Index, block.Difficulty))
+		// --- 🚩 AMBIL PEKERJAAN ---
+		work, err := bvmClient.GetWork(address, minerName)
+		if err != nil {
+			time.Sleep(5 * time.Second)
+			continue
+		}
 
-        found := false
-        target := strings.Repeat("0", int(block.Difficulty))
+		block, ok := work.(types.Block)
+		if !ok || int64(block.Index) <= lastMinedHeight {
+			// Jika blok sudah ketinggalan atau sudah ada yang garap, tunggu sejenak.
+			time.Sleep(2 * time.Second)
+			continue
+		}
 
-        // PoW Loop
-        for i := 0; ; i++ {
-            // 🚩 PERBAIKAN 3: Cek status lebih jarang agar tidak membebani network
-            if i % 5000000 == 0 { 
-                currentStatus, _ := bvmClient.GetNodeStatus(address)
-                if int64(currentStatus.Height) >= int64(block.Index) {
-                    logger.Info("MINER", fmt.Sprintf("⏩ Blok #%d sudah ditemukan. Skip!", block.Index))
-                    break 
-                }
-            }
+		logger.Info("MINER", fmt.Sprintf("🔥 Transaksi Terdeteksi! Menambang Blok #%d | Diff: %d", block.Index, block.Difficulty))
 
-            block.Nonce = int32(i)
-            hash := block.CalculateBlockHash()
+		found := false
+		target := strings.Repeat("0", int(block.Difficulty))
 
-            if strings.HasPrefix(hash, target) {
-                block.Hash = hash
-                found = true
-                break
-            }
-        }
+		// PoW Loop
+		for i := 0; ; i++ {
+			// Cek interupsi setiap 2.000.000 hash agar tidak terlalu sering menembak network
+			if i%2000000 == 0 {
+				currentStatus, _ := bvmClient.GetNodeStatus(address)
+				if int64(currentStatus.Height) >= int64(block.Index) {
+					logger.Info("MINER", fmt.Sprintf("⏩ Blok #%d sudah disegel miner lain. Abort!", block.Index))
+					break
+				}
+			}
 
-        if found {
-            err := bvmClient.SubmitBlock(block)
-            if err == nil {
-                logger.Success("MINER", fmt.Sprintf("✅ Blok #%d TERSEGEL!", block.Index))
-                lastMinedHeight = int64(block.Index)
-            }
-        }
-    }
+			block.Nonce = int32(i)
+			hash := block.CalculateBlockHash()
+
+			if strings.HasPrefix(hash, target) {
+				block.Hash = hash
+				found = true
+				break
+			}
+		}
+
+		if found {
+			err := bvmClient.SubmitBlock(block)
+			if err == nil {
+				logger.Success("MINER", fmt.Sprintf("🧱 BERHASIL! Blok #%d telah dipahat ke Blockchain!", block.Index))
+				lastMinedHeight = int64(block.Index)
+			}
+		}
+	}
 }
