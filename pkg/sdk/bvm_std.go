@@ -62,6 +62,30 @@ func LockForBridgeWithMemo(from, to string, amount uint64, memo string) bool {
 func LockForBridge(from, to string, amount uint64) bool {
     return LockForBridgeWithMemo(from, to, amount, "L2_ANCHOR_SIMPLE")
 }
+func EnsureCloudAccess(appID, owner string) (string, error) {
+    // 1. Cek apakah sudah ada key tersimpan
+    keyPath := "./.cloud_api.key"
+    if dat, err := os.ReadFile(keyPath); err == nil {
+        return string(dat), nil
+    }
+
+    // 2. Jika tidak ada, panggil kurir pendaftaran di Client
+    fmt.Printf("🛡️ [SDK] Mendaftarkan '%s' ke BVM Cloud Storage...\n", appID)
+    c := client.NewBVMClient(CoreURL)
+    
+    // Panggil endpoint /api/storage/register
+    apiKey, err := c.RegisterApp(appID, owner)
+    if err != nil {
+        return "", fmt.Errorf("Gagal registrasi Cloud: %v", err)
+    }
+
+    // 3. Simpan key secara lokal untuk penggunaan masa depan
+    os.WriteFile(keyPath, []byte(apiKey), 0600)
+    fmt.Println("✅ [SDK] API Key Cloud berhasil didapatkan dan disimpan!")
+    
+    return apiKey, nil
+}
+
 
 // Fungsi dummy lainnya tetap biarkan agar tidak error saat compile
 func Transfer(from, to string, amount uint64, symbol string) bool { return true }

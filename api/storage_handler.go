@@ -5,9 +5,11 @@ import (
 	"fmt"                // 🚩 Tambahkan ini
 	"io"                 // 🚩 Tambahkan ini
 	"net/http"
+	"os"
+        "path/filepath"
+        "time"
 	"github.com/aziskebanaran/bvm-core/x"
 	"github.com/aziskebanaran/bvm-core/x/storage/keeper"
-	"github.com/aziskebanaran/bvm-core/x/storage/types"
 )
 
 
@@ -53,73 +55,74 @@ func HandleAppRegister(sk *keeper.StorageKeeper, k x.BVMKeeper) http.HandlerFunc
 	}
 }
 
+// ... HandleAppRegister tetap seperti sebelumnya ...
+
 func HandleAppPut(sk *keeper.StorageKeeper, k x.BVMKeeper) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
-        // 1. Ambil data dari context dengan Safe Assertion 🛡️
-        rawApp   := r.Context().Value("app_metadata")
-        rawUser  := r.Context().Value("user_id")
-        // app_owner biasanya ada di dalam app_metadata (AppContainer)
-
-        if rawApp == nil || rawUser == nil {
-            http.Error(w, `{"error": "Sesi tidak valid, silakan login ulang"}`, 401)
+        // 1. Parsing Multipart
+        if err := r.ParseMultipartForm(100 << 20); err != nil {
+            http.Error(w, "File terlalu besar", 400)
             return
         }
 
-        app, ok1 := rawApp.(types.AppContainer)
-        userID, ok2 := rawUser.(string)
-        if !ok1 || !ok2 {
-            http.Error(w, `{"error": "Gagal memproses otentikasi cloud"}`, 500)
-            return
-        }
-
-        // 2. Baca Body (Gunakan LimitReader agar tidak terkena serangan Flood)
-        bodyBytes, err := io.ReadAll(r.Body)
+        file, header, err := r.FormFile("file")
         if err != nil {
-            http.Error(w, "Gagal membaca data", 400)
+            http.Error(w, "Paket file tidak ditemukan", 400)
             return
         }
+        defer file.Close()
 
-        var req struct {
-            Key   string `json:"key"`
-            Value string `json:"value"`
-        }
-        if err := json.Unmarshal(bodyBytes, &req); err != nil {
-            http.Error(w, "Format JSON salah", 400)
-            return
-        }
+        owner := r.FormValue("owner")
+        appID := r.FormValue("app_id") // 🚩 Sekarang kita gunakan di bawah
 
-        // 3. Namespacing: AppID:UserID:Key
-        finalKey := fmt.Sprintf("%s:%s:%s", app.AppID, userID, req.Key)
-
-        // 4. Proses Billing (Bakar saldo Owner Aplikasi) 🔥
-        // Kita gunakan app.Owner yang didapat dari database metadata
-        burnAmount, err := sk.ProcessAutoBilling(app.Owner, len(bodyBytes), k)
+        // 2. Billing
+        fileSize := header.Size
+        burnAmount, err := sk.ProcessAutoBilling(owner, int(fileSize), k)
         if err != nil {
-            http.Error(w, "Saldo Owner App Tidak Cukup untuk Biaya Simpan (Burn)", 402)
+            http.Error(w, "Saldo tidak cukup", 402)
             return
         }
 
-        // 5. Pahat ke Disk melalui SafePut
-        userData := types.UserData{
-            AppID: app.AppID,
-            Key:   finalKey, 
-            Value: req.Value,
-        }
+        // 3. Penyimpanan Fisik
+        // Kita masukkan appID ke dalam nama file agar rapi
+        storageID := fmt.Sprintf("%s-%d-%s", appID, time.Now().Unix(), header.Filename)
+        savePath := filepath.Join("data", "apps_storage", storageID)
 
-        // Gunakan owner aplikasi sebagai pemegang otoritas SafePut
-        err = sk.SafePut(app.AppID, userData, app.Owner)
+        dst, err := os.Create(savePath)
         if err != nil {
-            http.Error(w, "BVM-GUARD: "+err.Error(), 403)
+            http.Error(w, "Gagal membuat gudang data", 500)
             return
         }
+        defer dst.Close()
 
-        // 6. Response Sukses
-        w.Header().Set("Content-Type", "application/json")
+        io.Copy(dst, file)
+
         json.NewEncoder(w).Encode(map[string]interface{}{
-            "status": "Data Abadi di Cloud",
-            "path":   finalKey,
-            "burned": burnAmount,
+            "status":     "success",
+            "storage_id": storageID,
+            "burned":     burnAmount,
         })
+    }
+}
+
+func HandleAppGet(sk *keeper.StorageKeeper) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        storageID := r.URL.Query().Get("id")
+        if storageID == "" {
+            http.Error(w, "ID diperlukan", 400)
+            return
+        }
+
+        // Jalur ke data/apps_storage
+        filePath := filepath.Join("data", "apps_storage", storageID)
+
+        if _, err := os.Stat(filePath); os.IsNotExist(err) {
+            http.Error(w, "File tidak ditemukan", 404)
+            return
+        }
+
+        w.Header().Set("Content-Type", "application/zip")
+        http.ServeFile(w, r, filePath)
     }
 }
 
@@ -132,41 +135,3 @@ func getUserID(r *http.Request) string {
     return ""
 }
 
-// HandleAppGet: Versi Ramping & Sinkron 🚀
-func HandleAppGet(sk *keeper.StorageKeeper) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        // 1. Ambil Metadata & UserID
-        rawApp, _ := r.Context().Value("app_metadata").(types.AppContainer)
-        userID := getUserID(r)
-        key := r.URL.Query().Get("key")
-
-        if rawApp.AppID == "" || userID == "" || key == "" {
-            http.Error(w, "Parameter atau Sesi tidak lengkap", 400)
-            return
-        }
-
-        // 2. 🚩 SINKRONISASI: Gunakan format yang SAMA dengan HandleAppPut
-        finalKey := fmt.Sprintf("%s:%s:%s", rawApp.AppID, userID, key)
-
-        // 3. Eksekusi Ambil Data
-        appDB, err := sk.GetAppStore(rawApp.AppID)
-        if err != nil {
-            http.Error(w, "DB Error", 500); return
-        }
-        defer appDB.Close()
-
-        var val string
-        if err := appDB.Get(finalKey, &val); err != nil {
-            w.Header().Set("Content-Type", "application/json")
-            json.NewEncoder(w).Encode(map[string]string{
-                "key": key, "value": "", "status": "NOT_FOUND", "path": finalKey,
-            })
-            return
-        }
-
-        w.Header().Set("Content-Type", "application/json")
-        json.NewEncoder(w).Encode(map[string]string{
-            "key": key, "value": val, "status": "SUCCESS",
-        })
-    }
-}

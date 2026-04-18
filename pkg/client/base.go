@@ -114,3 +114,22 @@ func (c *BVMClient) UploadToCloud(filePath string, owner string) (string, error)
 
     return result.StorageID, nil
 }
+
+func (c *BVMClient) RegisterApp(appID, owner string) (string, error) {
+    reqBody, _ := json.Marshal(map[string]string{
+        "app_id": appID,
+        "owner":  owner,
+    })
+
+    resp, err := c.HTTP.Post(c.BaseURL+"/api/storage/register", "application/json", bytes.NewBuffer(reqBody))
+    if err != nil { return "", err }
+    defer resp.Body.Close()
+
+    var res struct {
+        Status string `json:"status"`
+        ApiKey string `json:"api_key"`
+    }
+    json.NewDecoder(resp.Body).Decode(&res)
+
+    return res.ApiKey, nil
+}
