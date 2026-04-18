@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 	"fmt"
-	"github.com/aziskebanaran/bvm-core/x/bvm/types"
+	"github.com/aziskebanaran/bvm-core/pkg/types"
 )
 
 type BVMClient struct {

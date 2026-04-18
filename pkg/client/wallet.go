@@ -3,7 +3,7 @@ package client
 import (
 	"bytes"
 	 "encoding/json"
-	"github.com/aziskebanaran/bvm-core/x/bvm/types"
+	"github.com/aziskebanaran/bvm-core/pkg/types"
 	"fmt"
 	"net/http"
 )

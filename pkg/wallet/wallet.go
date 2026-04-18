@@ -3,7 +3,7 @@ package wallet
 import (
 	"github.com/aziskebanaran/bvm-core/pkg/client" // Kabel Sakti Sultan
 	"github.com/aziskebanaran/bvm-core/pkg/logger" // Logger Berwarna
-	"github.com/aziskebanaran/bvm-core/x/bvm/types"
+	"github.com/aziskebanaran/bvm-core/pkg/types"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -95,7 +95,7 @@ func (w *BVMWallet) SignAndPack(c *client.BVMClient, to string, amount uint64, s
 
     // 3. RAKIT TRANSAKSI (Gunakan NewTransaction agar Timestamp terisi otomatis)
     // Sesuai types/transaction.go: From, To, Amount, Fee, Symbol, Memo, Nonce, Params
-    tx := types.NewTransaction(w.Address, to, amount, info.DynamicFee, symbol, memo, finalNonce, info.Params)
+    tx := types.NewTransaction(w.Address, to, amount, info.DynamicFee, symbol, memo, finalNonce)
 
     // 🚩 PENTING: Masukkan PublicKey SEBELUM hitung Hash
     tx.PublicKey = w.PublicKey
