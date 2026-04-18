@@ -1,10 +1,11 @@
+//go:build wasm
 package sdk
 
 import (
     "unsafe"
 )
 
-// --- HOST FUNCTIONS (Deklarasi Murni - Tanpa Isi/Body) ---
+// --- 1. HOST FUNCTIONS (Deklarasi Murni untuk Kernel) ---
 
 //go:wasmimport env transfer_token
 func host_transfer_token(fP, fS, tP, tS uint32, am uint64, sP, sS uint32) uint32
@@ -24,13 +25,19 @@ func host_update_stake(aP, aS uint32, am uint64, op uint32) uint32
 //go:wasmimport env get_validator_power
 func host_get_validator_power(aP, aS uint32) uint64
 
-// --- WRAPPER (Tetap seperti biasa) ---
+//go:wasmimport env register_nexus
+func host_register_nexus(idP, idS, ownP, ownS, tokP, tokS uint32, stake uint64) uint32
+
+//go:wasmimport env lock_for_bridge
+func host_lock_for_bridge(fP, fS, tP, tS uint32, am uint64) uint32
+
+// --- 2. WRAPPERS (Fungsi yang dipanggil oleh Kontrak Sultan) ---
 
 func Transfer(from, to string, amount uint64, symbol string) bool {
-    fPtr, fSize := stringToPtr(from)
-    tPtr, tSize := stringToPtr(to)
-    sPtr, sSize := stringToPtr(symbol)
-    return host_transfer_token(fPtr, fSize, tPtr, tSize, amount, sPtr, sSize) == 1
+    fP, fS := stringToPtr(from)
+    tP, tS := stringToPtr(to)
+    sP, sS := stringToPtr(symbol)
+    return host_transfer_token(fP, fS, tP, tS, amount, sP, sS) == 1
 }
 
 func GetCaller() string {
@@ -41,25 +48,38 @@ func GetCaller() string {
 }
 
 func Mint(target string, amount uint64, symbol string) bool {
-    aPtr, aSize := stringToPtr(target)
-    sPtr, sSize := stringToPtr(symbol)
-    return host_mint_token(aPtr, aSize, amount, sPtr, sSize) == 1
+    aP, aS := stringToPtr(target)
+    sP, sS := stringToPtr(symbol)
+    return host_mint_token(aP, aS, amount, sP, sS) == 1
 }
 
 func Emit(tag, message string) {
-    tPtr, tSize := stringToPtr(tag)
-    mPtr, mSize := stringToPtr(message)
-    host_emit_event(tPtr, tSize, mPtr, mSize)
+    tP, tS := stringToPtr(tag)
+    mP, mS := stringToPtr(message)
+    host_emit_event(tP, tS, mP, mS)
 }
 
 func UpdateStake(address string, amount uint64, isAdding bool) bool {
-    aPtr, aSize := stringToPtr(address)
+    aP, aS := stringToPtr(address)
     var op uint32 = 0
     if isAdding { op = 1 }
-    return host_update_stake(aPtr, aSize, amount, op) == 1
+    return host_update_stake(aP, aS, amount, op) == 1
 }
 
-// --- HELPERS ---
+func RegisterNexus(id, owner, token string, stake uint64) bool {
+    iP, iS := stringToPtr(id)
+    oP, oS := stringToPtr(owner)
+    tP, tS := stringToPtr(token)
+    return host_register_nexus(iP, iS, oP, oS, tP, tS, stake) == 1
+}
+
+func LockForBridge(from, to string, amount uint64) bool {
+    fP, fS := stringToPtr(from)
+    tP, tS := stringToPtr(to)
+    return host_lock_for_bridge(fP, fS, tP, tS, amount) == 1
+}
+
+// --- 3. HELPERS ---
 
 func stringToPtr(s string) (uint32, uint32) {
     if s == "" { return 0, 0 }
@@ -68,19 +88,4 @@ func stringToPtr(s string) (uint32, uint32) {
 
 func PtrToString(ptr uint32, size uint32) string {
     return unsafe.String((*byte)(unsafe.Pointer(uintptr(ptr))), size)
-}
-
-//go:wasmimport env register_nexus
-func host_register_nexus(idP, idS, ownP, ownS, tokP, tokS uint32, stake uint64) uint32
-
-//go:wasmimport env lock_for_bridge
-func host_lock_for_bridge(fP, fS, tP, tS uint32, am uint64) uint32
-
-// --- WRAPPER NYA ---
-
-func RegisterNexus(id, owner, token string, stake uint64) bool {
-    iP, iS := stringToPtr(id)
-    oP, oS := stringToPtr(owner)
-    tP, tS := stringToPtr(token)
-    return host_register_nexus(iP, iS, oP, oS, tP, tS, stake) == 1
 }

@@ -8,10 +8,22 @@ WASM_SRC=contracts/test_contract/main.go
 .PHONY: setup build start miner check send stats search mempool clean build_wasm super
 
 # --- 1. SETUP & BUILD ---
-setup:
-	@echo "🛠️  Menyiapkan SDK BVM Core..."
+tidy:
+	@echo "🧹 Merapikan Folder Tools..."
+	@mkdir -p tools
+	@if [ -f compiler.py ]; then mv compiler.py tools/; fi
 	@go mod tidy
-	@echo "✅ SDK Siap!"
+	@echo "✅ Folder bersih dan rapi!"
+
+build_wasm:
+	@echo "🏗️  Membangun Smart Contract WASM..."
+	@mkdir -p build
+	GOOS=wasip1 GOARCH=wasm go build -o build/dpos.wasm ./x/wasm/contracts/dpos.go
+	GOOS=wasip1 GOARCH=wasm go build -o build/test_contract.wasm ./contracts/test_contract/main.go
+	@echo "🪄  Menstabilkan biner dengan Compiler Sultan..."
+	@python3 tools/compiler.py build/dpos.wasm
+	@python3 tools/compiler.py build/test_contract.wasm
+	@echo "✅ Semua Kontrak Teroptimasi!"
 
 build:
 	@echo "🏗️  Membangun Otak Pusat (CLI)..."
@@ -45,19 +57,7 @@ send:
 	@echo "💸 Mengirim BVM..."
 	@./$(BINARY_NAME) wallet send --to $(to) --amount $(amount)
 
-# --- 5. SMART CONTRACT (GO STANDAR - INDEPENDENT MODE) ---
-build_wasm:
-	@echo "🏗️  Membangun Smart Contract WASM..."
-	@mkdir -p build
-	@# Build DPoS
-	GOOS=wasip1 GOARCH=wasm go build -o build/dpos.wasm ./x/wasm/contracts/dpos.go
-	@# Build Test Contract
-	GOOS=wasip1 GOARCH=wasm go build -o build/test_contract.wasm ./contracts/test_contract/main.go
-	@echo "🧹 Menstabilkan biner..."
-	@# Jalankan script python Sultan di sini untuk kedua file .wasm tersebut
-	@echo "✅ Semua Kontrak Siap!"
-
-# --- 6. CLEANING ---
+# --- 5. CLEANING ---
 clean:
 	@echo "🧹 Membersihkan Sampah..."
 	@rm -f $(BINARY_NAME)
