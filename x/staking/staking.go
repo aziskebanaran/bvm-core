@@ -134,7 +134,7 @@ func (s *StakingEngine) QueryTopValidators(n int) []*types.Validator {
     s.Mu.RLock()
     defer s.Mu.RUnlock()
 
-     fmt.Printf("🔍 [DEBUG] Jumlah validator di RAM: %d\n", len(s.Validators))
+     //fmt.Printf("🔍 [DEBUG] Jumlah validator di RAM: %d\n", len(s.Validators))
 
     var list []*types.Validator
     for _, v := range s.Validators {

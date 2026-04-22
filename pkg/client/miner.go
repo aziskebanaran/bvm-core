@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"encoding/json"
+        core "github.com/aziskebanaran/bvm-core/x/bvm/types"
 	"github.com/aziskebanaran/bvm-core/pkg/types"
 	"fmt"
 	"net/http"
@@ -24,8 +25,8 @@ func (c *BVMClient) GetNodeStatus(minerAddr string) (*types.NodeStatus, error) {
         return &status, nil
 }
 
-
-func (c *BVMClient) SubmitBlock(block types.Block) error {
+// UBAH: Gunakan core.Block
+func (c *BVMClient) SubmitBlock(block core.Block) error {
     payload, err := json.Marshal(block)
     if err != nil { return err }
 
@@ -33,13 +34,13 @@ func (c *BVMClient) SubmitBlock(block types.Block) error {
     req.Header.Set("Content-Type", "application/json")
 
     resp, err := c.HTTP.Do(req)
-    if err != nil { 
-        return fmt.Errorf("🌐 Jaringan Terputus/Timeout: %v", err) 
+    if err != nil {
+        return fmt.Errorf("🌐 Jaringan Terputus/Timeout: %v", err)
     }
     defer resp.Body.Close()
 
     if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusAccepted {
-        return nil 
+        return nil
     }
 
     if resp.StatusCode == http.StatusConflict {
@@ -47,6 +48,28 @@ func (c *BVMClient) SubmitBlock(block types.Block) error {
     }
 
     return fmt.Errorf("❌ Kernel Menolak (Status: %d)", resp.StatusCode)
+}
+
+// UBAH: Fungsi GetWork juga harus memberikan core.Block
+func (c *BVMClient) GetWork(minerAddr string, minerName string) (interface{}, error) {
+    url := fmt.Sprintf("%s/api/getwork?address=%s&miner=%s", c.BaseURL, minerAddr, minerName)
+
+    resp, err := http.Get(url)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        return nil, fmt.Errorf("server return status: %d", resp.StatusCode)
+    }
+
+    var block core.Block // GUNAKAN core.Block di sini
+    if err := json.NewDecoder(resp.Body).Decode(&block); err != nil {
+        return nil, err
+    }
+
+    return block, nil
 }
 
 
@@ -70,27 +93,3 @@ func (c *BVMClient) GetMempoolTxs() ([]types.Transaction, error) {
     return wrapper.Txs, nil
 }
 
-// pkg/client/client.go (atau di mana BVMClient didefinisikan)
-
-func (c *BVMClient) GetWork(minerAddr string, minerName string) (interface{}, error) {
-    // 🚩 Hubungi API Kernel untuk mendapatkan paket kerja terbaru
-    url := fmt.Sprintf("%s/api/getwork?address=%s&miner=%s", c.BaseURL, minerAddr, minerName)
-
-    resp, err := http.Get(url)
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
-
-    if resp.StatusCode != http.StatusOK {
-        return nil, fmt.Errorf("server return status: %d", resp.StatusCode)
-    }
-
-    var block types.Block
-    if err := json.NewDecoder(resp.Body).Decode(&block); err != nil {
-        return nil, err
-    }
-
-    // Pastikan block yang diterima tidak kosong
-    return block, nil
-}

@@ -6,11 +6,14 @@ import (
 )
 
 type HandshakeRequest struct {
-	NodeID      string `json:"node_id"`
-	Version     string `json:"version"`      // Harus cocok dengan constants.ProjectVersion
-	GenesisHash string `json:"genesis_hash"` // Kunci utama: Harus sama!
-	BestHeight  int    `json:"best_height"`  // Untuk tahu siapa yang lebih update
-	Timestamp   int64  `json:"timestamp"`
+        NodeID      string `json:"node_id"`
+        Version     string `json:"version"`
+        GenesisHash string `json:"genesis_hash"`
+        BestHeight  int    `json:"best_height"`
+        // 🚩 TAMBAHKAN INI: Agar Nexus tahu jalur komunikasi balik
+        P2PPort     int    `json:"p2p_port"`     // Default: 9090/9091
+        APIPort     int    `json:"api_port"`     // Default: 8080/9092
+        Timestamp   int64  `json:"timestamp"`
 }
 
 type HandshakeResponse struct {

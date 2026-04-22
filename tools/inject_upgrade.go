@@ -6,8 +6,8 @@ import (
 )
 
 func main() {
-	// 1. Koneksi ke Database (Node Wajib OFF)
-	store, err := storage.NewLevelDBStore("./data/blockchain_db")
+	// 1. Koneksi ke Database (Node Wajib OFF88)8888
+	store, err := storage.NewLevelDBStore("./data/blockchain_db", 8)
 	if err != nil {
 		fmt.Printf("❌ Gagal membuka DB: %v\n", err)
 		return

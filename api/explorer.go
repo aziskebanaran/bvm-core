@@ -79,33 +79,35 @@ func HandleHolders(k x.BVMKeeper) http.HandlerFunc {
 	}
 }
 
-// HandleGetBlockByHeight: Pencarian blok spesifik
+
 func HandleGetBlockByHeight(k x.BVMKeeper) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/api/block/")
-		height, err := strconv.Atoi(path)
-		if err != nil {
-			http.Error(w, "Format Height Salah, Sultan!", http.StatusBadRequest)
-			return
-		}
+	    return func(w http.ResponseWriter, r *http.Request) {
+	        // Mengambil angka setelah /api/block/
+	        heightStr := strings.TrimPrefix(r.URL.Path, "/api/block/")
+	        height, err := strconv.ParseUint(heightStr, 10, 64)
+	        if err != nil {
+	            http.Error(w, "Sultan, format height harus angka!", http.StatusBadRequest)
+	            return
+	        }
 
-		chain := k.GetChain()
-		var targetBlock *types.Block
+                // 🚩 PERBAIKAN: Jangan ambil seluruh chain ke RAM!
+                // Minta Keeper untuk ambil SATU blok saja langsung dari Database (Disk)
+                targetBlock, err := k.GetBlockByHeight(height) 
 
-		// Cari blok di dalam rantai resmi
-		if height >= 0 && height < len(chain) {
-			targetBlock = &chain[height]
-		}
+                if err != nil || targetBlock == nil {
+                        w.Header().Set("Content-Type", "application/json")
+                        w.WriteHeader(http.StatusNotFound)
+                        json.NewEncoder(w).Encode(map[string]string{
+                                "error": "Blok belum terbit atau tidak ditemukan di disk!",
+                        })
+                        return
+                }
 
-		if targetBlock == nil {
-			http.Error(w, "Blok Belum Terbit, Sultan!", http.StatusNotFound)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(targetBlock)
-	}
+                w.Header().Set("Content-Type", "application/json")
+                json.NewEncoder(w).Encode(targetBlock)
+        }
 }
+
 
 func HandleRealTimeExplorer(k x.BVMKeeper) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {

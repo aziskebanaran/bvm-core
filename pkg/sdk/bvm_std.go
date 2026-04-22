@@ -95,3 +95,7 @@ func Mint(target string, amount uint64, symbol string) bool { return true }
 func Emit(tag, message string) { fmt.Printf("📝 [EVENT] %s: %s\n", tag, message) }
 func UpdateStake(address string, amount uint64, isAdding bool) bool { return true }
 func PtrToString(ptr uint32, size uint32) string { return "std_string" }
+// Tambahkan di deretan fungsi dummy di bagian bawah bvm_std.go
+func GetMethod() string { return "transfer" }
+func GetArgString(key string) string { return "" }
+func GetArgUint64(key string) uint64 { return 0 }

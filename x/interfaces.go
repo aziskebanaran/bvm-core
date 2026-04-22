@@ -83,12 +83,14 @@ type BVMKeeper interface {
     GetSecureBalance(address string) (types.WalletState, bool)
     SearchAccount(query string) (interface{}, bool)
     GetNextNonce(address string) uint64
+    GetBlockByHeight(height uint64) (*types.Block, error)
 
     GetStore() storage.BVMStore
     // Tambahkan ini agar API bisa ambil data upgrades
     GetAllScheduledUpgrades() interface{}
 
     GetValidatorObjects() ([]stakingtypes.Validator, error)
+    GetValidatorCount() int // 🚩 Tambahkan ini agar bisa diakses secara global
     IsFeatureActive(feature string, height int64) bool
 
 	//Consensus
@@ -119,7 +121,9 @@ type BVMKeeper interface {
 
 	//Reward
     DistributeBlockReward(height int64, fees uint64) (uint64, uint64, error)
-    GetSubsidiAtHeight(height int64) uint64
+    GetSubsidiAtHeight(height int64, validatorCount int) uint64
+
+
 
 	//Minting
     GetCurrentReward(height int64) uint64

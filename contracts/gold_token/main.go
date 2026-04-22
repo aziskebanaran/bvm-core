@@ -9,12 +9,17 @@ func handle() {
     method := sdk.GetMethod() // Ambil metode dari payload (misal: "transfer")
     
     switch method {
-    case "transfer":
-        to := sdk.GetArgString("to")
-        amount := sdk.GetArgUint64("amount")
-        // Logika internal atau panggil host bank
-        sdk.Transfer(to, amount)
-        
+	// Di dalam switch case "transfer"
+case "transfer":
+    to := sdk.GetArgString("to")
+    amount := sdk.GetArgUint64("amount")
+    sender := sdk.GetCaller() // Ambil siapa yang memanggil contract
+
+    // 🚩 PERBAIKAN: Kirim 4 argumen sesuai SDK
+    sdk.Transfer(sender, to, amount, "GOLD")
+
+
+
     case "mint":
         // Cek Security: Hanya Owner yang bisa Mint
         if sdk.GetCaller() == "bvmfa15608e2b0225f96b915" {

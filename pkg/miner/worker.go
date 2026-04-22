@@ -13,8 +13,14 @@ func StartMining(address string, kernelURL string) {
 	bvmClient := client.NewBVMClient(kernelURL)
 	const minerName = "BVM-EXTERNAL-PRO"
 
+       // --- 🛡️ PROTEKSI SULTAN ---
+        status, err := bvmClient.GetNodeStatus(address)
+        if err != nil || status == nil {
+        logger.Error("MINER", "⚠️ Gagal koneksi awal ke Nexus/Core. Pastikan Nexus AKTIF di port 9092.")
+           return // Keluar dari fungsi agar loop di main.go yang menangani retry
+        }
+
 	// Ambil status awal untuk sinkronisasi Height
-	status, _ := bvmClient.GetNodeStatus(address)
 	lastMinedHeight := int64(status.Height)
 
 	for {

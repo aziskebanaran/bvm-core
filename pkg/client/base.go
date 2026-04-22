@@ -10,7 +10,8 @@ import (
 	"net/http"
 	"time"
 	"fmt"
-	"github.com/aziskebanaran/bvm-core/pkg/types"
+	"github.com/aziskebanaran/bvm-core/x/bvm/types"
+	"github.com/aziskebanaran/bvm-core/pkg/storage"
 )
 
 type BVMClient struct {
@@ -136,4 +137,63 @@ func (c *BVMClient) RegisterApp(appID, owner string) (string, error) {
     json.NewDecoder(resp.Body).Decode(&res)
 
     return res.ApiKey, nil
+}
+
+// GetBlockByHeight: Menjemput satu blok spesifik dari Core
+func (c *BVMClient) GetBlockByHeight(height uint64) (*types.Block, error) {
+    // Tembak ke endpoint /api/block/[height]
+    url := fmt.Sprintf("%s/api/block/%d", c.BaseURL, height)
+
+    resp, err := c.HTTP.Get(url)
+    if err != nil {
+        return nil, fmt.Errorf("🌐 Gagal kontak Core: %v", err)
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        if resp.StatusCode == http.StatusNotFound {
+            return nil, fmt.Errorf("🚨 Blok #%d belum ada (Core belum sampai sana)", height)
+        }
+        return nil, fmt.Errorf("🚨 Core Error (Status: %d)", resp.StatusCode)
+    }
+
+    var block types.Block
+    if err := json.NewDecoder(resp.Body).Decode(&block); err != nil {
+        return nil, fmt.Errorf("❌ Format blok tidak valid: %v", err)
+    }
+
+    return &block, nil
+}
+
+func (c *BVMClient) FastSync(start uint64, target uint64, store storage.BVMStore) error {
+    fmt.Printf("⚡ [FASTSYNC] Memulai akselerasi dari #%d ke #%d...\n", start, target)
+    
+    // Kita tarik dalam kelompok per 100 blok agar tidak membebani RAM
+    const batchSize = 100 
+    
+    for current := start + 1; current <= target; {
+        end := current + batchSize
+        if end > target {
+            end = target
+        }
+
+        fmt.Printf("📥 Menarik batch blok #%d sampai #%d...\n", current, end)
+        
+        // Panggil endpoint Nexus yang sudah kita buat
+        for h := current; h <= end; h++ {
+            block, err := c.GetBlockByHeight(h)
+            if err != nil {
+                return fmt.Errorf("Gagal di blok %d: %v", h, err)
+            }
+            
+            // Simpan ke database lokal perangkat baru
+            store.SaveBlock(*block)
+            store.Put("m:height", h)
+        }
+        
+        current = end + 1
+    }
+    
+    fmt.Println("✅ [FASTSYNC] Sinkronisasi Selesai! Perangkat sudah mutakhir.")
+    return nil
 }

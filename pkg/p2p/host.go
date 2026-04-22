@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+	"bytes"
+	"encoding/json"
 )
 
 // StartNode: Tetap menggunakan TCP untuk koneksi dasar
@@ -35,7 +37,7 @@ func StartNode(port int) {
 // SyncBlocks: Fungsi inti untuk menarik blok yang tertinggal
 func SyncBlocks(targetIP string, startHeight int, targetHeight int) {
 	fmt.Printf("🔄 [SYNC] Memulai sinkronisasi: %d -> %d dari %s\n", startHeight, targetHeight, targetIP)
-	
+
 	client := &http.Client{Timeout: 10 * time.Second}
 
 	for h := startHeight + 1; h <= targetHeight; h++ {
@@ -46,7 +48,7 @@ func SyncBlocks(targetIP string, startHeight int, targetHeight int) {
 			fmt.Printf("⚠️ Gagal mengambil blok #%d: %v\n", h, err)
 			break
 		}
-		
+
 		// 2. Dekode data blok (Bisa diganti MsgPack nanti agar lebih ngebut)
 		// Di sini kita asumsikan respon sukses
 		if resp.StatusCode == http.StatusOK {
@@ -69,4 +71,28 @@ func SyncBlocks(targetIP string, startHeight int, targetHeight int) {
 func BroadcastMessage(msg string) {
 	fmt.Printf("📢 [P2P Broadcast]: %s\n", msg)
 	// Logika iterasi GlobalPeerManager.Peers dan kirim data akan ada di sini
+}
+
+// SendToPeer: Mengirim data ke API target dengan proteksi timeout
+func SendToPeer(targetAddr string, endpoint string, data interface{}) error {
+    client := &http.Client{Timeout: 5 * time.Second} // Jangan tunggu terlalu lama
+    
+    payload, err := json.Marshal(data)
+    if err != nil {
+        return err
+    }
+
+    // Pastikan targetAddr sudah termasuk port API (misal :8080 atau :9092)
+    url := fmt.Sprintf("http://%s%s", targetAddr, endpoint)
+    
+    resp, err := client.Post(url, "application/json", bytes.NewBuffer(payload))
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        return fmt.Errorf("node merespon dengan status: %d", resp.StatusCode)
+    }
+    return nil
 }

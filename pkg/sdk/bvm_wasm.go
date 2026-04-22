@@ -79,6 +79,38 @@ func LockForBridge(from, to string, amount uint64) bool {
     return host_lock_for_bridge(fP, fS, tP, tS, amount) == 1
 }
 
+// --- 1. HOST FUNCTIONS (Deklarasi) ---
+//go:wasmimport env get_method
+func host_get_method(ptr, size uint32) uint32
+
+//go:wasmimport env get_arg_string
+func host_get_arg_string(kP, kS, vP, vS uint32) uint32
+
+//go:wasmimport env get_arg_uint64
+func host_get_arg_uint64(kP, kS uint32) uint64
+
+// --- 2. WRAPPERS (Tambahkan di bawah Wrapper lainnya) ---
+
+func GetMethod() string {
+    buf := make([]byte, 32)
+    ptr, size := uint32(uintptr(unsafe.Pointer(&buf[0]))), uint32(len(buf))
+    n := host_get_method(ptr, size)
+    return string(buf[:n])
+}
+
+func GetArgString(key string) string {
+    kP, kS := stringToPtr(key)
+    buf := make([]byte, 128) // Buffer untuk nilai argumen
+    vP, vS := uint32(uintptr(unsafe.Pointer(&buf[0]))), uint32(len(buf))
+    n := host_get_arg_string(kP, kS, vP, vS)
+    return string(buf[:n])
+}
+
+func GetArgUint64(key string) uint64 {
+    kP, kS := stringToPtr(key)
+    return host_get_arg_uint64(kP, kS)
+}
+
 // --- 3. HELPERS ---
 
 func stringToPtr(s string) (uint32, uint32) {

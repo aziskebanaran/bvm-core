@@ -38,9 +38,35 @@ func NewLevelDBStore(path string, cacheMB int) (*LevelDBStore, error) {
 
 func (s *LevelDBStore) GetDB() *leveldb.DB { return s.db }
 
-// 🚩 STANDAR BARU: Gunakan Key b:[index]
+// 🚩 STANDAR BARU: Simpan Blok SEKALIGUS Indeks Transaksinya
 func (s *LevelDBStore) SaveBlock(block types.Block) error {
-	return s.Put(fmt.Sprintf("b:%d", block.Index), block)
+    // 1. Simpan Bloknya dulu seperti biasa
+    err := s.Put(fmt.Sprintf("b:%d", block.Index), block)
+    if err != nil {
+        return err
+    }
+
+    // 2. Langsung Indeks semua transaksi yang ada di dalam blok tersebut
+    if len(block.Transactions) > 0 {
+        return s.IndexTransactions(block.Transactions)
+    }
+
+    return nil
+}
+
+// 🚩 USULAN SULTAN: Indexing Transaksi agar pencarian secepat kilat (O(1))
+func (s *LevelDBStore) IndexTransactions(txs []types.Transaction) error {
+    batch := s.NewBatch()
+    for _, tx := range txs {
+        // ✅ SEKARANG BENAR: Menggunakan tx.ID sesuai struct Transaction
+        key := fmt.Sprintf("tx:%s", tx.ID) 
+
+        err := s.PutToBatch(batch, key, tx)
+        if err != nil {
+            return err
+        }
+    }
+    return s.WriteBatch(batch)
 }
 
 func (s *LevelDBStore) Put(key string, value interface{}) error {
@@ -171,6 +197,7 @@ func (s *LevelDBStore) GetLatestBlocks(limit int) ([]types.Block, error) {
     }
     return blocks, nil
 }
+
 
 
 func (s *LevelDBStore) Close() error { return s.db.Close() }
