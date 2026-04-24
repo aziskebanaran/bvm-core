@@ -8,34 +8,42 @@ on:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # PENTING: Memberi izin GitHub untuk menulis rilis
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4 # Update ke v4 (Node 24)
+        uses: actions/checkout@v4
 
       - name: Setup Go
-        uses: actions/setup-go@v5 # Update ke v5 (Node 24)
+        uses: actions/setup-go@v5
         with:
           go-version: '1.21'
 
-      - name: Build BVM
+      - name: Build BVM Binary
         run: |
-          # Pastikan folder build ada agar zip tidak error
-          mkdir -p build
-          # Kompilasi biner utama
+          # 1. Kompilasi biner utama
           go build -o bvm ./cmd/bvm/main.go
-          # Beri izin eksekusi
           chmod +x bvm
-          # Buat ZIP dengan proteksi jika folder build kosong
-          zip -r bvm-linux-amd64.zip bvm build/
+          
+          # 2. Buat folder distribusi sementara agar rapi
+          mkdir -p dist
+          cp bvm dist/
+          
+          # 3. Salin file WASM jika ada (menggunakan wildcard agar tidak error jika kosong)
+          cp build/*.wasm dist/ 2>/dev/null || echo "No WASM files found, skipping..."
+          
+          # 4. Masuk ke folder dist dan buat ZIP
+          cd dist && zip -r ../bvm-linux-amd64.zip .
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2 # Update ke v2
+        uses: softprops/action-gh-release@v2
         with:
           files: bvm-linux-amd64.zip
-          tag_name: ${{ github.ref_name }}
           name: BVM Super-App ${{ github.ref_name }}
           body: |
-            🚀 **BVM Super-App: Era Modern**
-            Biner ini siap dijalankan di Linux/Termux.
+            🚀 **BVM Super-App: Platform OS Blockchain**
+            Status: Blok #6000+ Terlewati.
+            
+            Unduh biner di bawah untuk menjalankan Node, Wallet, dan App Manager.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
