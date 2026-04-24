@@ -1,9 +1,6 @@
 data/
-*.ldb
 *.log
 CURRENT
 LOCK
 MANIFEST-*
-bvm
-main
 node_wallet.json
