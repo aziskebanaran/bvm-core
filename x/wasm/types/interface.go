@@ -2,6 +2,7 @@ package types
 
 import (
     "github.com/aziskebanaran/bvm-core/pkg/storage" // 🚩 Tambahkan ini!
+    "github.com/aziskebanaran/bvm-core/x/bvm/types"
 )
 
 // WasmKeeper: Antarmuka utama untuk mesin Smart Contract
@@ -12,6 +13,8 @@ type WasmKeeper interface {
     RegisterBVMFunctions()
     VerifyZKP(proof string, publicInputs string) bool
     GetContractBalance(addr string, contractID string) uint64
+    QueryContract(contractAddr string, method string, args ...interface{}) (interface{}, error)
+    ValidateBlock(block types.Block) error
 }
 
 // --- JEMBATAN KOMUNIKASI (DITAMBAHKAN) ---

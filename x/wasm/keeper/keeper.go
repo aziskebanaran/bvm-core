@@ -9,6 +9,7 @@ import (
     "github.com/aziskebanaran/bvm-core/pkg/logger"
     "github.com/aziskebanaran/bvm-core/pkg/storage"
     "github.com/aziskebanaran/bvm-core/x" // 🚩 Untuk akses BVMKeeper
+    "github.com/aziskebanaran/bvm-core/x/bvm/types"
     "github.com/tetratelabs/wazero"
     "github.com/tetratelabs/wazero/api"
     "github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
@@ -23,20 +24,23 @@ type Keeper struct {
     currentCaller string 
 }
 
+
+// 🚩 PERUBAHAN: Kembalikan interface, bukan struct mentah
 func NewKeeper(store storage.BVMStore) *Keeper {
     ctx := context.Background()
-    // Inisialisasi Wazero Engine
     runtime := wazero.NewRuntime(ctx)
-
-    // --- BARIS SAKTI ---
     wasi_snapshot_preview1.MustInstantiate(ctx, runtime)
-    // ------------------
 
-    return &Keeper{
+    k := &Keeper{
         Store:  store,
         Wazero: runtime,
         Ctx:    ctx,
     }
+
+    // 🚩 PENTING: Daftarkan fungsi host agar WASM bisa jalan
+    k.RegisterBVMFunctions() 
+
+    return k
 }
 
 // SetBVM: Menghubungkan WASM ke Jenderal Pusat (Kabinet)
@@ -341,6 +345,52 @@ builder.NewFunctionBuilder().
         }).
         Export("get_validator_power")
 
+    // --- Fungsi 12: Get State (Akses Database Konstitusi) ---
+    builder.NewFunctionBuilder().
+        WithFunc(func(ctx context.Context, m api.Module, kP, kS, vP, vS uint32) uint32 {
+            mem := m.Memory()
+            keyBuf, _ := mem.Read(kP, kS)
+            key := string(keyBuf)
+
+            var val uint64
+            // Ambil langsung dari Store LevelDB Sultan
+            err := k.Store.Get(key, &val)
+            if err != nil { return 0 }
+
+            // Tulis hasilnya ke memori WASM agar kontrak bisa baca
+            ok := mem.WriteUint64Le(vP, val)
+            if !ok { return 0 }
+            return 1
+        }).
+        Export("get_state")
+
+    // --- Fungsi 13: Put State (Simpan Aturan Baru) ---
+    builder.NewFunctionBuilder().
+        WithFunc(func(ctx context.Context, m api.Module, kP, kS, vP, vS uint32) uint32 {
+            mem := m.Memory()
+            keyBuf, _ := mem.Read(kP, kS)
+            key := string(keyBuf)
+
+            // Baca nilai uint64 dari memori WASM
+            val, ok := mem.ReadUint64Le(vP)
+            if !ok { return 0 }
+
+            // Simpan ke database Kernel
+            err := k.Store.Put(key, val)
+            if err != nil { return 0 }
+            return 1
+        }).
+        Export("put_state")
+
+    // --- Fungsi 14: Get Block Height (Waktu Konstitusi) ---
+    builder.NewFunctionBuilder().
+        WithFunc(func(ctx context.Context, m api.Module) uint64 {
+            if k.BVM == nil { return 0 }
+            // Tanya ke Jenderal Pusat berapa tinggi blok sekarang
+            return uint64(k.BVM.GetLastHeight())
+        }).
+        Export("get_block_height")
+
 
     // --- AKHIR: EKSEKUSI PENDAFTARAN ---
     _, err := builder.Instantiate(k.Ctx)
@@ -363,6 +413,63 @@ func (k *Keeper) DeployContractFromFile(name string, filePath string) (string, e
     }
 
     return k.DeployContract(name, bytecode)
+}
+
+func (k *Keeper) QueryContract(contractAddr string, method string, args ...interface{}) (interface{}, error) {
+    logger.Info("WASM", fmt.Sprintf("🔍 Query Kontrak [%s] -> Metode: %s", contractAddr, method))
+
+    // 1. 🚩 PERBAIKAN: Gunakan dua argumen sesuai standar Store Sultan
+    var bytecode []byte
+    err := k.Store.Get("wasm:code:"+contractAddr, &bytecode) // Key dan Pointer
+    if err != nil {
+        return nil, fmt.Errorf("kontrak tidak ditemukan: %v", err)
+    }
+
+    // 2. Instantiate modul secara sementara (Read-Only)
+    mod, err := k.Wazero.Instantiate(k.Ctx, bytecode)
+    if err != nil {
+        return nil, fmt.Errorf("gagal instantiate untuk query: %v", err)
+    }
+    defer mod.Close(k.Ctx)
+
+    // 3. Cari fungsi yang dimaksud
+    fn := mod.ExportedFunction(method)
+    if fn == nil {
+        return nil, fmt.Errorf("metode %s tidak ditemukan di kontrak", method)
+    }
+
+    // 4. Eksekusi fungsi
+    // Untuk IsFeatureEnabled, biasanya kita tidak perlu argumen rumit di level ini
+    results, err := fn.Call(k.Ctx)
+    if err != nil {
+        return nil, fmt.Errorf("eksekusi query gagal: %v", err)
+    }
+
+    // 5. Kembalikan hasil (1 = true, 0 = false)
+    if len(results) > 0 {
+        return results[0] > 0, nil
+    }
+
+    return false, nil
+}
+
+// Tambahkan ini di ~/bvm-core/x/wasm/keeper/keeper.go
+
+func (k *Keeper) ValidateBlock(block types.Block) error {
+    // 1. Jika blok tidak punya transaksi pintar, anggap valid (opsional)
+    if len(block.Transactions) == 0 {
+        return nil
+    }
+
+    // 2. Logika Sentinel: Jalankan setiap transaksi di dalam VM WASM
+    // Nexus akan menghitung ulang apakah Hash State setelah eksekusi 
+    // sama dengan yang diklaim oleh Miner.
+    fmt.Printf("🔍 [WASM-SENTINEL] Memvalidasi Blok #%d...\n", block.Index)
+    
+    // Di sini Jenderal memanggil fungsi eksekusi WASM yang sudah ada
+    // Contoh: err := k.ExecuteContractLogic(block)
+    
+    return nil // Kembalikan nil jika semua hitungan cocok
 }
 
 

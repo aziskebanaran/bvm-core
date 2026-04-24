@@ -55,36 +55,43 @@ func HandleAppRegister(sk *keeper.StorageKeeper, k x.BVMKeeper) http.HandlerFunc
 	}
 }
 
-// ... HandleAppRegister tetap seperti sebelumnya ...
-
 func HandleAppPut(sk *keeper.StorageKeeper, k x.BVMKeeper) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
-        // 1. Parsing Multipart
-        if err := r.ParseMultipartForm(100 << 20); err != nil {
+        // 1. IDENTITAS (Ambil dari Context Middleware)
+        owner := getUserID(r) 
+        if owner == "" {
+            w.Header().Set("Content-Type", "application/json")
+            w.WriteHeader(http.StatusUnauthorized)
+            w.Write([]byte(`{"status": "error", "message": "Identitas tidak valid atau belum login"}`))
+            return
+        }
+
+        // 2. PARSING MULTIPART (Ambil File)
+        if err := r.ParseMultipartForm(100 << 20); err != nil { // Max 100MB
             http.Error(w, "File terlalu besar", 400)
             return
         }
 
         file, header, err := r.FormFile("file")
         if err != nil {
-            http.Error(w, "Paket file tidak ditemukan", 400)
+            http.Error(w, "File tidak ditemukan dalam form-data", 400)
             return
         }
         defer file.Close()
 
-        owner := r.FormValue("owner")
-        appID := r.FormValue("app_id") // 🚩 Sekarang kita gunakan di bawah
+        appID := r.FormValue("app_id")
 
-        // 2. Billing
+        // 3. BILLING (Potong Saldo Owner Otomatis)
         fileSize := header.Size
         burnAmount, err := sk.ProcessAutoBilling(owner, int(fileSize), k)
         if err != nil {
-            http.Error(w, "Saldo tidak cukup", 402)
+            w.Header().Set("Content-Type", "application/json")
+            w.WriteHeader(http.StatusPaymentRequired) // 402 Payment Required
+            w.Write([]byte(fmt.Sprintf(`{"status": "error", "message": "%v"}`, err)))
             return
         }
 
-        // 3. Penyimpanan Fisik
-        // Kita masukkan appID ke dalam nama file agar rapi
+        // 4. PENYIMPANAN FISIK
         storageID := fmt.Sprintf("%s-%d-%s", appID, time.Now().Unix(), header.Filename)
         savePath := filepath.Join("data", "apps_storage", storageID)
 
@@ -97,10 +104,14 @@ func HandleAppPut(sk *keeper.StorageKeeper, k x.BVMKeeper) http.HandlerFunc {
 
         io.Copy(dst, file)
 
+        // 5. RESPON SUKSES
+        w.Header().Set("Content-Type", "application/json")
         json.NewEncoder(w).Encode(map[string]interface{}{
             "status":     "success",
             "storage_id": storageID,
+            "owner":      owner,
             "burned":     burnAmount,
+            "message":    "Data berhasil dipahat di Cloud & Biaya dibakar!",
         })
     }
 }
@@ -126,12 +137,18 @@ func HandleAppGet(sk *keeper.StorageKeeper) http.HandlerFunc {
     }
 }
 
-
-// Helper untuk ambil UserID dari context secara ringkas
+// Helper untuk ambil Identitas User dari context secara ringkas
 func getUserID(r *http.Request) string {
-    if uid, ok := r.Context().Value("user_id").(string); ok {
+    // 1. Cek key "user_address" (Biasanya hasil verifikasi Signature)
+    if addr, ok := r.Context().Value("user_address").(string); ok && addr != "" {
+        return addr
+    }
+
+    // 2. Cek key "user_id" (Biasanya hasil decode JWT lama)
+    if uid, ok := r.Context().Value("user_id").(string); ok && uid != "" {
         return uid
     }
+
+    // 3. Jika keduanya kosong, berarti user belum terverifikasi
     return ""
 }
-

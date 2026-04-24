@@ -123,7 +123,9 @@ type BVMKeeper interface {
     DistributeBlockReward(height int64, fees uint64) (uint64, uint64, error)
     GetSubsidiAtHeight(height int64, validatorCount int) uint64
 
-
+    // 🚩 TAMBAHKAN INI agar API Sultan bisa memanggilnya:
+    CallGovernance(method string, args ...interface{}) (interface{}, error)
+    InitializeGovernance() error
 
 	//Minting
     GetCurrentReward(height int64) uint64

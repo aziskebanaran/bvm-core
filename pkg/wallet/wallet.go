@@ -250,3 +250,29 @@ func (w *BVMWallet) SignAndPackCustom(c *client.BVMClient, username string) (typ
 
     return tx, nil
 }
+
+// SignMessage: Menandatangani pesan teks mentah (seperti pesan login)
+func (w *BVMWallet) SignMessage(message string) (string, error) {
+	// 1. Hash pesan menggunakan SHA256 (Standar BVM)
+	hash := sha256.Sum256([]byte(message))
+
+	// 2. Decode Private Key dari Hex ke format ECDSA
+	privBytes, err := hex.DecodeString(w.PrivateKey)
+	if err != nil {
+		return "", fmt.Errorf("gagal decode private key: %v", err)
+	}
+
+	rawPriv, err := x509.ParseECPrivateKey(privBytes)
+	if err != nil {
+		return "", fmt.Errorf("gagal parse private key: %v", err)
+	}
+
+	// 3. Tanda tangani Hash menggunakan standar ASN1
+	sig, err := ecdsa.SignASN1(rand.Reader, rawPriv, hash[:])
+	if err != nil {
+		return "", fmt.Errorf("gagal tanda tangan: %v", err)
+	}
+
+	// 4. Kembalikan dalam format Hex string
+	return hex.EncodeToString(sig), nil
+}

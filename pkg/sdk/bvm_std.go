@@ -87,6 +87,11 @@ func EnsureCloudAccess(appID, owner string) (string, error) {
     return apiKey, nil
 }
 
+// Tambahkan di bvm_std.go
+func GetState(key string, value interface{}) error { return nil }
+func PutState(key string, val uint64) { }
+func GetBlockHeight() uint64 { return 6000 } // Default ke era modern
+
 
 // Fungsi dummy lainnya tetap biarkan agar tidak error saat compile
 func Transfer(from, to string, amount uint64, symbol string) bool { return true }

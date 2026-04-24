@@ -198,6 +198,32 @@ func (s *LevelDBStore) GetLatestBlocks(limit int) ([]types.Block, error) {
     return blocks, nil
 }
 
+// Scan: Mencari data berdasarkan prefix dan menerjemahkannya secara otomatis
+func (s *LevelDBStore) Scan(prefix string) (map[string]interface{}, error) {
+    results := make(map[string]interface{})
+    iter := s.db.NewIterator(util.BytesPrefix([]byte(prefix)), nil)
+    defer iter.Release()
+
+    for iter.Next() {
+        key := string(iter.Key())
+        
+        // Kita gunakan interface{} agar bisa menampung tipe data apapun (uint64, string, dll)
+        var val interface{}
+        err := msgpack.Unmarshal(iter.Value(), &val)
+        if err != nil {
+            // Jika gagal unmarshal satu data, kita log tapi lanjut ke data berikutnya
+            fmt.Printf("⚠️ [DB-SCAN] Gagal unmarshal key %s: %v\n", key, err)
+            continue
+        }
+        
+        results[key] = val
+    }
+
+    if err := iter.Error(); err != nil {
+        return nil, err
+    }
+    return results, nil
+}
 
 
 func (s *LevelDBStore) Close() error { return s.db.Close() }

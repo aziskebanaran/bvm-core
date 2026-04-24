@@ -6,6 +6,7 @@ import (
 	"github.com/aziskebanaran/bvm-core/pkg/types"
 	"fmt"
 	"net/http"
+	"os"
 )
 
 // GetBalance: Mengambil saldo koin spesifik (Multi-Token)
@@ -33,22 +34,45 @@ func (c *BVMClient) GetBalance(address string, symbol string) (uint64, error) {
     return result.Balance, nil
 }
 
-// GetSecureState: Mengambil data saldo & nonce dari jalur VVIP Core
-func (c *BVMClient) GetSecureState(address string) (*types.WalletState, error) {
-    url := fmt.Sprintf("%s/api/balance?address=%s", c.BaseURL, address)
-    resp, err := c.HTTP.Get(url)
-    if err != nil { return nil, err }
+func (c *BVMClient) GetSecureState(query string) (*types.WalletState, error) {
+    // 1. 🎯 ARAHKAN KE ENDPOINT SEARCH (Yang sudah kita perbaiki tadi)
+    // Gunakan parameter 'q' agar ditangkap oleh api/utility.go
+    url := fmt.Sprintf("%s/api/search?q=%s", c.BaseURL, query)
+
+    // 2. Buat objek Request
+    req, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+        return nil, fmt.Errorf("gagal membuat request: %v", err)
+    }
+
+    // 3. 🛡️ Pasang Token Sesi jika ada
+    if c.Token != "" {
+        req.Header.Set("Authorization", "Bearer "+c.Token)
+    }
+
+    // 4. Eksekusi
+    resp, err := c.HTTP.Do(req)
+    if err != nil {
+        return nil, fmt.Errorf("🛰️ Jalur Komunikasi Terputus: %v", err)
+    }
     defer resp.Body.Close()
 
-    // Gunakan types.WalletState yang kita buat di types.go tadi!
+    // 5. Handling Status
+    if resp.StatusCode == http.StatusUnauthorized {
+        return nil, fmt.Errorf("🚫 Sesi Berakhir: Silakan Login Ulang")
+    }
+    if resp.StatusCode == http.StatusNotFound {
+        return nil, fmt.Errorf("identitas @%s tidak ditemukan", query)
+    }
+
+    // 6. Decode data
     var state types.WalletState
     if err := json.NewDecoder(resp.Body).Decode(&state); err != nil {
-        return nil, fmt.Errorf("gagal parsing data core: %v", err)
+        return nil, fmt.Errorf("gagal parsing data dari radar: %v", err)
     }
 
     return &state, nil
 }
-
 
 // GetAccount: Mengambil data akun lengkap (Termasuk Nonce & Map Balances)
 func (c *BVMClient) GetAccount(address string) (*types.Account, error) {
@@ -122,3 +146,44 @@ func (c *BVMClient) GetHistory(address string) ([]types.Transaction, error) {
 	return history, err
 }
 
+func (c *BVMClient) Login(username, sig, msg string) (string, error) {
+    data := map[string]string{
+        "username":  username,
+        "signature": sig,
+        "message":   msg,
+    }
+    body, _ := json.Marshal(data)
+
+    resp, err := c.HTTP.Post(c.BaseURL+"/api/login", "application/json", bytes.NewBuffer(body))
+    if err != nil { 
+        return "", err 
+    }
+    defer resp.Body.Close()
+
+    var res struct {
+        Status string `json:"status"`
+        Token  string `json:"token"`
+        Error  string `json:"error"`
+    }
+
+    if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+        return "", fmt.Errorf("respon server bukan JSON yang valid")
+    }
+
+    // 🚩 PERBAIKAN DI SINI:
+    if res.Status == "LOGIN_SUCCESS" {
+        c.Token = res.Token // 🎯 Simpan ke memory client
+        
+        // 💾 OPSIONAL: Simpan ke file agar tidak hilang saat aplikasi ditutup
+        _ = os.WriteFile("./data/session.jwt", []byte(res.Token), 0644)
+        
+        return res.Token, nil
+    }
+
+    // Jika status bukan LOGIN_SUCCESS, berikan pesan error dari server
+    if res.Error != "" {
+        return "", fmt.Errorf(res.Error)
+    }
+    
+    return "", fmt.Errorf("gagal login: status tidak dikenal")
+} // 🔍 Pastikan hanya ada satu kurung kurawal tutup di sini!

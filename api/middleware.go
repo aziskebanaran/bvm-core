@@ -3,23 +3,25 @@ package api
 import (
     "context"
     "net/http"
-    "strings"
-    "github.com/golang-jwt/jwt/v5"
-    "github.com/aziskebanaran/bvm-core/x/storage/keeper" // Sesuaikan dengan path Sultan
+    "github.com/aziskebanaran/bvm-core/x"
+    "github.com/aziskebanaran/bvm-core/x/storage/keeper"
 )
 
+// 🚀 Jenderal, JWT_SECRET SUDAH DIBUANG. 
+// Sekarang kita menggunakan Kekuatan Kriptografi murni.
 
-// 🚩 TAMBAHKAN INI DI SINI
-var JWT_SECRET = []byte("BVM-SULTAN-RAHASIA-2026")
-
-func AuthenticateBVMCloud(sk *keeper.StorageKeeper) func(http.Handler) http.Handler {
+func AuthenticateBVMCloud(sk *keeper.StorageKeeper, k x.BVMKeeper) func(http.Handler) http.Handler {
     return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { // 🚩 SUDAH DIPERBAIKI
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-            // 1. Cek API Key Aplikasi via StorageKeeper (sk)
+            // 1. Ambil Identitas & Bukti (Signature) dari Header
             appID := r.Header.Get("X-BVM-App-ID")
+            address := r.Header.Get("X-BVM-Address")   // Alamat dompet bvmf...
+            signature := r.Header.Get("X-BVM-Signature") // Tanda tangan digital
+            message := r.Header.Get("X-BVM-Message")     // Pesan yang ditandatangani
 
-            appData, err := sk.GetAppMetadata(appID) 
+            // 2. Cek apakah App ID terdaftar di StorageKeeper
+            appData, err := sk.GetAppMetadata(appID)
             if err != nil {
                 w.Header().Set("Content-Type", "application/json")
                 w.WriteHeader(http.StatusUnauthorized)
@@ -27,34 +29,30 @@ func AuthenticateBVMCloud(sk *keeper.StorageKeeper) func(http.Handler) http.Hand
                 return
             }
 
-            // 2. Cek JWT User
-            authHeader := r.Header.Get("Authorization")
-            if authHeader == "" {
-                http.Error(w, `{"error": "Authorization Header Diperlukan"}`, 401)
+            // 3. VERIFIKASI KRIPTOGRAFI (Pengganti JWT)
+            // Mesin akan mengecek apakah Signature benar-benar dibuat oleh Address tersebut
+            if address == "" || signature == "" || message == "" {
+                http.Error(w, `{"error": "Bukti identitas (Address/Signature/Msg) diperlukan"}`, 401)
                 return
             }
-            tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
-            token, _ := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-                return JWT_SECRET, nil
-            })
-
-            if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-                username, _ := claims["username"].(string)
-
-                // 3. SINKRONISASI CONTEXT (Gunakan "app_metadata")
-                ctx := r.Context()
-                ctx = context.WithValue(ctx, "app_id", appID)
-                ctx = context.WithValue(ctx, "user_id", username)
-                ctx = context.WithValue(ctx, "app_metadata", appData) 
-
-                // Teruskan ke handler
-                next.ServeHTTP(w, r.WithContext(ctx))
-            } else {
+            isValid := k.GetAuth().VerifyManualSignature(address, message, signature)
+            if !isValid {
                 w.Header().Set("Content-Type", "application/json")
                 w.WriteHeader(http.StatusUnauthorized)
-                w.Write([]byte(`{"error": "Token User Tidak Valid"}`))
+                w.Write([]byte(`{"error": "Tanda Tangan Digital Tidak Sah!"}`))
+                return
             }
-        }) // 🚩 TUTUP HANDLERFUNC
-    } // 🚩 TUTUP MIDDLEWARE RETURN
+
+            // 4. SINKRONISASI CONTEXT
+            // Sekarang kita menggunakan 'address' sebagai identitas utama, bukan lagi username JWT
+            ctx := r.Context()
+            ctx = context.WithValue(ctx, "app_id", appID)
+            ctx = context.WithValue(ctx, "user_address", address)
+            ctx = context.WithValue(ctx, "app_metadata", appData)
+
+            // Teruskan ke handler dengan identitas yang sudah terverifikasi
+            next.ServeHTTP(w, r.WithContext(ctx))
+        })
+    }
 }

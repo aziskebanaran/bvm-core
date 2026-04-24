@@ -178,32 +178,57 @@ func (a *AuthKeeper) RegisterUser(username string, address string) error {
         Tier:      "Basic",
     }
 
-    // 4. Pahat ke database (Mapping dua arah agar bisa dicari lewat username atau address)
-    a.Store.Put("user:"+address, profile)
-    a.Store.Put("username:"+username, address)
 
-    logger.Success("AUTH", fmt.Sprintf("User Baru Terdaftar: %s (%s)", username, address[:10]))
+	batch := a.Store.NewBatch()
+    a.Store.PutToBatch(batch, "user:"+address, profile)
+    a.Store.PutToBatch(batch, "username:"+username, address)
+
+    err := a.Store.WriteBatch(batch)
+    if err != nil {
+        return fmt.Errorf("gagal memahat profil ke disk: %v", err)
+    }
+
+    logger.Success("AUTH", fmt.Sprintf("User Resmi Terdaftar & Dipahat: %s", username))
     return nil
 }
 
-// GetProfile: Untuk fitur "Cari User" yang Sultan inginkan
 func (a *AuthKeeper) GetProfile(identifier string) (types.UserProfile, error) {
     var profile types.UserProfile
+    
+    // 🚩 PERBAIKAN 1: Bersihkan input agar konsisten dengan database
+    cleanID := strings.ToLower(strings.TrimSpace(identifier))
 
-    // Cek apakah identifier itu address atau username
-    if strings.HasPrefix(identifier, "bvmf") {
-        err := a.Store.Get("user:"+identifier, &profile)
+    // 1. Jika identifier adalah Address langsung
+    if strings.HasPrefix(cleanID, "bvmf") {
+        err := a.Store.Get("user:"+cleanID, &profile)
         return profile, err
     }
 
-    // Jika username, cari address-nya dulu
+    // 2. Jika identifier adalah Username
     var addr string
-    if err := a.Store.Get("username:"+identifier, &addr); err != nil {
-        return profile, err
+    err := a.Store.Get("username:"+cleanID, &addr)
+    
+    // 🚩 DEBUGGING LOG (Lihat di terminal Node saat search dilakukan)
+    if err != nil {
+        fmt.Printf("⚠️ [AUTH-DEBUG] Gagal ambil mapping username:%s | Error: %v\n", cleanID, err)
+        return profile, fmt.Errorf("mapping username %s tidak ditemukan", cleanID)
     }
 
-    err := a.Store.Get("user:"+addr, &profile)
-    return profile, err
+    // 3. Ambil Profile menggunakan address hasil mapping
+    // Gunakan alamat yang didapat dari mapping untuk menarik data KTP lengkap
+    err = a.Store.Get("user:"+addr, &profile)
+    if err != nil {
+        fmt.Printf("⚠️ [AUTH-DEBUG] Mapping ada (%s), tapi data UserProfile hilang!\n", addr)
+        return profile, fmt.Errorf("profile untuk address %s gagal dimuat", addr)
+    }
+
+    // 🚩 PERBAIKAN 2: Pastikan struct profile tidak kosong sebelum dikirim
+    if profile.Address == "" {
+        profile.Address = addr // Manual patching jika field address di struct sempat kosong
+        profile.Username = cleanID
+    }
+
+    return profile, nil
 }
 
 

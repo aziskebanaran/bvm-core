@@ -14,9 +14,11 @@ import (
 	"github.com/aziskebanaran/bvm-core/pkg/storage"
 )
 
+
 type BVMClient struct {
-	BaseURL string
-	HTTP    *http.Client
+    BaseURL string
+    Token   string // 🚩 Tambahkan ini sebagai kantong penyimpanan token
+    HTTP    *http.Client
 }
 
 func NewBVMClient(url string) *BVMClient {

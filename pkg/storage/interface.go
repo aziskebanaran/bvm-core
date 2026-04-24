@@ -23,6 +23,7 @@ type BVMStore interface {
     NewBatch() Batch
     PutToBatch(batch Batch, key string, value interface{}) error
     WriteBatch(batch Batch) error
+    Scan(prefix string) (map[string]interface{}, error)
 
     Close() error
 }

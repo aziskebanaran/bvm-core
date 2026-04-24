@@ -64,7 +64,7 @@ func NewRouter(k x.BVMKeeper, mp x.MempoolKeeper, store storage.BVMStore, nodeAd
         storageK, _ := k.GetCloudStorage().(*keeper.StorageKeeper)
 
         // Pastikan nama variabel di sini...
-        authMiddleware := AuthenticateBVMCloud(storageK)
+        authMiddleware := AuthenticateBVMCloud(storageK, k)
 
         // ...sama dengan yang digunakan di sini
         mux.HandleFunc("/api/app/register", HandleAppRegister(storageK, k))
@@ -73,6 +73,7 @@ func NewRouter(k x.BVMKeeper, mp x.MempoolKeeper, store storage.BVMStore, nodeAd
 
         // --- 9. IDENTITY & AUTH SYSTEM ---
         mux.HandleFunc("/api/login", HandleLogin(k)) // Pintu masuk utama untuk JWT
+	mux.HandleFunc("/api/secure-state", HandleBalance(k))
 
 	// --- 10. LAYER 2 BRIDGE (Nexus Dock) ---
 	mux.HandleFunc("/api/anchor", HandleL2Anchor(k))
@@ -95,7 +96,6 @@ func NewRouter(k x.BVMKeeper, mp x.MempoolKeeper, store storage.BVMStore, nodeAd
 			})
 			return
 		}
-		http.NotFound(w, r)
 	})
 
 	return enableCORS(mux)

@@ -9,51 +9,59 @@ import (
 	"net/http"
 	"os"
 	"time"
+"strings"
 )
 
-// HandleSearchUser: Mencari data pengguna berdasarkan Alamat atau Username
 func HandleSearchUser(k x.BVMKeeper) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Content-Type", "application/json")
-        query := r.URL.Query().Get("q")
+
+        // 🚩 DETEKSI AGRESIF: Coba ambil dari parameter 'q', 'username', atau 'address'
+        rawQuery := r.URL.Query().Get("q")
+        if rawQuery == "" { rawQuery = r.URL.Query().Get("username") }
+        if rawQuery == "" { rawQuery = r.URL.Query().Get("address") }
+
+        query := strings.ToLower(strings.TrimSpace(rawQuery))
+        query = strings.TrimPrefix(query, "@") 
+
+        // 🚩 LOG RADAR: CEK DI TAB NODE (TAB 1) SAAT SULTAN SEARCH!
+        fmt.Printf("\n--- [RADAR SCAN] ---\n")
+        fmt.Printf("Raw Query: '%s'\n", rawQuery)
+        fmt.Printf("Clean Query: '%s'\n", query)
+        fmt.Printf("Full URL: %s\n", r.URL.String())
+        fmt.Printf("--------------------\n")
 
         if query == "" {
-            http.Error(w, `{"error": "Parameter pencarian (q) diperlukan"}`, http.StatusBadRequest)
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Server menerima query kosong dari CLI"})
             return
         }
 
-        var profile interface{}
-        var err error
+        var targetAddress string
+        profile, err := k.GetAuth().GetProfile(query)
 
-        // 🚩 LOGIKA DETEKSI: 
-        // Jika dimulai dengan 'bvmf', cari berdasarkan Alamat.
-        // Jika tidak, cari berdasarkan Username melalui AuthKeeper.
-        if len(query) >= 4 && query[:4] == "bvmf" {
-            // Cari data saldo/akun standar
-            profile, _ = k.GetSecureBalance(query)
-        } else {
-            // Cari data Profil dari Registry yang kita buat di x/auth
-            // Kita panggil GetProfile dari AuthKeeper Sultan
-            profile, err = k.GetAuth().GetProfile(query)
-            if err != nil {
+        if err != nil || profile.Address == "" {
+            if strings.HasPrefix(query, "bvmf") {
+                targetAddress = query
+            } else {
                 w.WriteHeader(http.StatusNotFound)
                 json.NewEncoder(w).Encode(map[string]string{
-                    "error": fmt.Sprintf("Username @%s tidak ditemukan", query),
+                    "error": fmt.Sprintf("Username '%s' tidak terdaftar di database", query),
                 })
                 return
             }
+        } else {
+            targetAddress = profile.Address
         }
 
-        // Jika data kosong (untuk pencarian alamat)
-        if profile == nil {
+        finalState, ok := k.GetSecureBalance(targetAddress)
+        if !ok {
             w.WriteHeader(http.StatusNotFound)
-            json.NewEncoder(w).Encode(map[string]string{
-                "error": "Data tidak ditemukan",
-            })
+            json.NewEncoder(w).Encode(map[string]string{"error": "Wallet ada tapi saldo gagal dimuat"})
             return
         }
 
-        json.NewEncoder(w).Encode(profile)
+        json.NewEncoder(w).Encode(finalState)
     }
 }
 
@@ -118,35 +126,56 @@ func GetLiveLocation() string {
 
 func HandleLogin(k x.BVMKeeper) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+
         var req struct {
             Username  string `json:"username"`
             Signature string `json:"signature"`
-            Message   string `json:"message"` // Misal: "Login ke BVM Cloud pada [Timestamp]"
+            Message   string `json:"message"`
         }
 
         if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-            http.Error(w, "Format JSON Salah", 400)
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]string{"status": "ERROR", "error": "Format JSON Request Salah"})
             return
         }
 
-        // 1. Cari profil berdasarkan username
-        profile, err := k.GetAuth().GetProfile(req.Username)
-        if err != nil {
-            http.Error(w, "User belum terdaftar", 404)
+        // 🚩 PERBAIKAN: Gunakan req.Username, bukan query!
+        loginQuery := strings.ToLower(strings.TrimSpace(req.Username))
+
+        // 1. Cari profil berdasarkan username yang mau login
+        profile, err := k.GetAuth().GetProfile(loginQuery)
+
+        // Debug log untuk memantau siapa yang mencoba login
+        fmt.Printf("[LOGIN-DEBUG] User: %s | Found Addr: %s | Err: %v\n", loginQuery, profile.Address, err)
+
+        if err != nil || profile.Address == "" {
+            w.WriteHeader(http.StatusNotFound)
+            json.NewEncoder(w).Encode(map[string]string{
+                "status": "ERROR", 
+                "error":  "User @" + req.Username + " belum terdaftar di blok!",
+            })
             return
         }
 
-        // 2. VERIFIKASI TANDA TANGAN (Identity Check)
-        // Kita gunakan logika Verifikasi yang sudah ada di AuthKeeper Sultan
+        // 2. Verifikasi Tanda Tangan
         isValid := k.GetAuth().VerifyManualSignature(profile.Address, req.Message, req.Signature)
         if !isValid {
-            http.Error(w, "Tanda tangan tidak sah! Anda bukan pemilik akun ini.", 401)
+            w.WriteHeader(http.StatusUnauthorized)
+            json.NewEncoder(w).Encode(map[string]string{"status": "ERROR", "error": "Tanda tangan digital tidak sah!"})
             return
         }
 
-        // 3. Jika sah, berikan Token
-        token, _ := k.GetAuth().GenerateUserToken(profile.Username, profile.Address)
+        // 3. Generate Token
+        token, err := k.GetAuth().GenerateUserToken(profile.Username, profile.Address)
+        if err != nil || token == "" {
+            w.WriteHeader(http.StatusInternalServerError)
+            json.NewEncoder(w).Encode(map[string]string{"status": "ERROR", "error": "Gagal membuat sesi token"})
+            return
+        }
 
+        // 4. RESPON SUKSES
+        w.WriteHeader(http.StatusOK)
         json.NewEncoder(w).Encode(map[string]string{
             "status": "LOGIN_SUCCESS",
             "token":  token,

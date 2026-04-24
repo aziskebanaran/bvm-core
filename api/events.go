@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"os"
 )
 
@@ -40,45 +41,48 @@ func HandleGetEvents(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(allEvents[start:])
 }
 
-// HandleGetUpgrades: Kita ubah agar mengembalikan http.HandlerFunc
-// Dan menggunakan interface x.BVMKeeper agar seragam dengan router.go
 func HandleGetUpgrades(k x.BVMKeeper) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Content-Type", "application/json")
 
-        // Daftar fitur yang ingin Sultan pantau
-        features := []string{"WASM_ENGINE", "STAKING_V2", "BURN_FEE_V2", "TOKEN_FACTORY"}
-
         type UpgradeStatus struct {
             Feature          string `json:"feature"`
-            ActivationHeight int64  `json:"activation_height"`
+            ActivationHeight uint64 `json:"activation_height"`
             IsActive         bool   `json:"is_active"`
+            Source           string `json:"source"` // Tambahan info biar Sultan tahu asal usulnya
         }
 
         var results []UpgradeStatus
-        currentHeight := k.GetLastHeight()
+        currentHeight := uint64(k.GetLastHeight())
 
-        for _, f := range features {
-            var actHeight int64
-            key := "gov:upgrade:" + f
-            err := k.GetStore().Get(key, &actHeight)
+        // 1. 🔍 SCAN DATABASE SECARA DINAMIS
+        // Cari semua yang berawalan "gov:upgrade:"
+        dynamicData, err := k.GetStore().Scan("gov:upgrade:")
+        
+        if err == nil {
+            for key, val := range dynamicData {
+                // Bersihkan prefix untuk mendapatkan nama fiturnya (misal: GOV_V2)
+                featureName := strings.TrimPrefix(key, "gov:upgrade:")
+                
+                // Pastikan konversi tipe data aman
+                actHeight, _ := val.(uint64)
 
-            if err == nil {
                 results = append(results, UpgradeStatus{
-                    Feature:          f,
+                    Feature:          featureName,
                     ActivationHeight: actHeight,
-                    IsActive:         int64(currentHeight) >= actHeight,
-                })
-            } else {
-                // 🚩 Tambahkan status "Pending" jika data belum ada di DB
-                results = append(results, UpgradeStatus{
-                    Feature:          f,
-                    ActivationHeight: 0, // Belum dijadwalkan
-                    IsActive:         false,
+                    IsActive:         currentHeight >= actHeight,
+                    Source:           "WASM_Governance",
                 })
             }
         }
 
+        // 2. Kirim ke Sultan
+        if len(results) == 0 {
+            // Jika kosong, kirim array kosong bukan null
+            json.NewEncoder(w).Encode([]UpgradeStatus{})
+            return
+        }
+        
         json.NewEncoder(w).Encode(results)
     }
 }

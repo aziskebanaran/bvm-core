@@ -31,6 +31,15 @@ func host_register_nexus(idP, idS, ownP, ownS, tokP, tokS uint32, stake uint64) 
 //go:wasmimport env lock_for_bridge
 func host_lock_for_bridge(fP, fS, tP, tS uint32, am uint64) uint32
 
+//go:wasmimport env get_state
+func host_get_state(kP, kS, vP, vS uint32) uint32
+
+//go:wasmimport env put_state
+func host_put_state(kP, kS, vP, vS uint32) uint32
+
+//go:wasmimport env get_block_height
+func host_get_block_height() uint64
+
 // --- 2. WRAPPERS (Fungsi yang dipanggil oleh Kontrak Sultan) ---
 
 func Transfer(from, to string, amount uint64, symbol string) bool {
@@ -77,6 +86,30 @@ func LockForBridge(from, to string, amount uint64) bool {
     fP, fS := stringToPtr(from)
     tP, tS := stringToPtr(to)
     return host_lock_for_bridge(fP, fS, tP, tS, amount) == 1
+}
+
+func GetState(key string, value interface{}) error {
+    kP, kS := stringToPtr(key)
+    // Untuk simplifikasi awal, kita asumsikan data yang dikembalikan adalah uint64
+    // Nanti bisa dikembangkan untuk JSON unmarshal
+    buf := make([]byte, 8) 
+    vP, vS := uint32(uintptr(unsafe.Pointer(&buf[0]))), uint32(len(buf))
+    host_get_state(kP, kS, vP, vS)
+
+    // Casting manual ke pointer value (Sultan bisa kembangkan ini)
+    if v, ok := value.(*uint64); ok {
+        *v = *(*uint64)(unsafe.Pointer(&buf[0]))
+    }
+    return nil
+}
+
+func PutState(key string, val uint64) {
+    kP, kS := stringToPtr(key)
+    host_put_state(kP, kS, uint32(uintptr(unsafe.Pointer(&val))), 8)
+}
+
+func GetBlockHeight() uint64 {
+    return host_get_block_height()
 }
 
 // --- 1. HOST FUNCTIONS (Deklarasi) ---

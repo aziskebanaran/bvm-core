@@ -11,16 +11,21 @@ import (
 
 func HandleParams(k x.BVMKeeper) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
-        // 1. Ambil Data Parameter Jaringan
+        // --- 🚩 JALUR 1: POST (MENGUBAH ATURAN / KONSTITUSI) ---
+        if r.Method == http.MethodPost {
+            HandleUpdateConstitution(k)(w, r)
+            return
+        }
+
+        // --- 🚩 JALUR 2: GET (MELIHAT STATUS & PARAMETER) ---
+        // 1. Ambil Data dari Keeper Sultan
         paramsManager := k.GetParams()
         paramsData := paramsManager.GetParamsData()
-
-        // 2. Ambil Status Terkini & Ukuran Mempool
         status := k.GetStatus()
         pendingTxs := k.GetPendingTransactions()
         mempoolSize := len(pendingTxs)
 
-        // 3. Susun Respon JSON
+        // 2. Susun Respon JSON (Informasi Publik)
         response := map[string]interface{}{
             "params":       paramsData,
             "height":       status.Height,
@@ -32,7 +37,6 @@ func HandleParams(k x.BVMKeeper) http.HandlerFunc {
             "status":       "Operational",
         }
 
-        // 4. Kirim Respon
         w.Header().Set("Content-Type", "application/json")
         if err := json.NewEncoder(w).Encode(response); err != nil {
             w.WriteHeader(http.StatusInternalServerError)
@@ -42,7 +46,7 @@ func HandleParams(k x.BVMKeeper) http.HandlerFunc {
 
 func HandleUpdateConstitution(k x.BVMKeeper) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
-        // Keamanan: Hanya terima perintah dari localhost (Sultan sendiri)
+        // Keamanan tetap terjaga: Hanya localhost
         if !strings.HasPrefix(r.RemoteAddr, "127.0.0.1") && !strings.HasPrefix(r.RemoteAddr, "[::1]") {
             http.Error(w, "Akses Ilegal! Hanya Sultan yang boleh ubah Konstitusi.", 403)
             return
@@ -57,19 +61,33 @@ func HandleUpdateConstitution(k x.BVMKeeper) http.HandlerFunc {
             return
         }
 
-        // 🚩 SUNTIKAN PANAS (Hot-Inject)
-        // Kita gunakan k.GetStore() yang sudah terbuka dan aman dari lock
-        key := "gov:upgrade:" + req.Feature
-        err := k.GetStore().Put(key, req.Height)
+        currentHeight := uint64(k.GetLastHeight())
+        var err error
+
+        // 🚩 STRATEGI TRANSISI (The Bridge Logic)
+        if currentHeight < 6000 {
+            // ERA KLASIK: Masih suntik langsung ke Database (Legacy Mode)
+            key := "gov:upgrade:" + req.Feature
+            err = k.GetStore().Put(key, req.Height)
+            logger.Info("GOV", fmt.Sprintf("⚠️ Legacy Update: %s dijadwalkan via DB", req.Feature))
+        } else {
+            // ERA MODERN: Gunakan Smart Contract (The Shift)
+            // k.CallGovernance adalah jembatan yang kita buat di keeper/bridge.go
+            _, err = k.CallGovernance("ScheduleNewUpgrade", req.Feature, req.Height)
+            logger.Success("GOV", fmt.Sprintf("⚖️ Modern Update: %s dijadwalkan via Contract", req.Feature))
+        }
 
         if err != nil {
             http.Error(w, "Gagal update: "+err.Error(), 500)
             return
         }
 
-        logger.Success("GOV", fmt.Sprintf("🛡️ Aturan Baru: %s aktif di blok #%d", req.Feature, req.Height))
-
         w.Header().Set("Content-Type", "application/json")
-        json.NewEncoder(w).Encode(map[string]string{"status": "SUCCESS", "message": "Konstitusi diperbarui tanpa restart!"})
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "status":  "SUCCESS",
+            "mode":    "MODERN_WASM",
+            "feature": req.Feature,
+            "at_height": req.Height,
+        })
     }
 }

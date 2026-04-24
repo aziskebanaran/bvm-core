@@ -54,7 +54,7 @@ func (k *StorageKeeper) ProcessAutoBilling(owner string, dataSize int, bvm x.BVM
 
     // 4. KIRIM KE LUBANG HITAM (100% BURN)
     // Alamat "000..." secara teknis tidak memiliki kunci privat, koin terkunci selamanya.
-    burnAddr := "0000000000000000000000000000000000000000000000000000000000000000"
+    burnAddr := "bvmf000000000000000000000000000000000000burn"
     bvm.AddBalanceBVM(burnAddr, totalBurnAmount, nil)
 
     return totalBurnAmount, nil
