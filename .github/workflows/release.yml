@@ -18,11 +18,11 @@ jobs:
         with:
           go-version: '1.21'
 
-      - name: Compile
+      - name: Sync & Build
         run: |
+          go mod tidy
           go build -o bvm ./cmd/bvm/main.go
           zip bvm-linux.zip bvm
-          # Kita abaikan dulu folder build/ untuk memastikan biner utama lolos
 
       - name: Publish
         uses: softprops/action-gh-release@v2
