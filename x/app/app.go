@@ -187,7 +187,7 @@ func (app *BaseApp) ExportSnapshotToAI() {
     if status != 0 {
         logger.Error("AI-SENTINEL", pesan)
     } else {
-        logger.Success("AI-SENTINEL", "🧠 Pelajaran diterima: " + pesan)
+       // logger.Success("AI-SENTINEL", "🧠 Pelajaran diterima: " + pesan)
     }
 
     // 🚩 AUTO-PRUNING LOG: Jika blok kelipatan 1000, bersihkan cache database

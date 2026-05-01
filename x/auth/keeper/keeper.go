@@ -138,20 +138,33 @@ func (k *AuthKeeper) SetAccount(acc types.Account) error {
 	return k.Store.Put("acc:"+acc.Address, acc)
 }
 
-// 🚩 Tambahkan ini agar Keeper tidak perlu panggil NonceMgr langsung
 func (a *AuthKeeper) GetNextNonce(addr string) uint64 {
-    return a.NonceMgr.GetNextNonce(addr)
+    // 1. Coba ambil dari RAM dulu (untuk kecepatan)
+    nonce := a.NonceMgr.GetNextNonce(addr)
+
+    // 2. Jika di RAM masih 0, coba intip Brankas Disk "n:"
+    if nonce == 0 {
+        var diskNonce uint64
+        // Gunakan prefix "n:" agar SAMA dengan execution.go
+        err := a.Store.Get("n:"+addr, &diskNonce)
+        if err == nil && diskNonce > 0 {
+            // Jika ketemu di disk, sinkronkan ke RAM agar selanjutnya cepat
+            a.NonceMgr.SetNonce(addr, diskNonce)
+            return diskNonce
+        }
+    }
+    return nonce
 }
 
-// 🚩 Update ini agar sinkron ke Database saat dipanggil ExecuteBlock
 func (a *AuthKeeper) IncrementNonce(addr string) error {
-    // 1. Naikkan di RAM (NonceMgr)
+    // 1. Naikkan di RAM
     a.NonceMgr.Increment(addr)
 
-    // 2. PAHAT KE DISK (Kunci Utama Sultan)
+    // 2. PAHAT KE DISK (Gunakan "n:" bukan "nonce:")
     newNonce := a.NonceMgr.GetNextNonce(addr)
-    return a.Store.Put("nonce:"+addr, newNonce)
+    return a.Store.Put("n:"+addr, newNonce)
 }
+
 
 func (a *AuthKeeper) CheckNonceIntegrity(addr string) (bool, uint64, uint64) {
     return a.NonceMgr.HealthCheckNonce(addr)

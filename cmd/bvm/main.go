@@ -10,6 +10,7 @@ import (
 	"github.com/aziskebanaran/bvm-core/pkg/types"
 	"github.com/aziskebanaran/bvm-core/pkg/wallet"
 	"github.com/spf13/cobra"
+	"github.com/joho/godotenv"
 )
 
 var nodeCmd = &cobra.Command{
@@ -23,6 +24,14 @@ var walletCmd = &cobra.Command{
 }
 
 func main() {
+    // --- 🛡️ OPERASI LOAD KONFIGURASI ---
+    err := godotenv.Load()
+    if err != nil {
+        fmt.Println("ℹ️  Info: Menjalankan tanpa file .env, pastikan variabel sudah di-export.")
+    } else {
+        fmt.Println("✅ [SYSTEM] Konfigurasi .env berhasil dimuat.")
+    }
+
     // 1. Inisialisasi Client
     bvmClient := client.NewBVMClient("http://localhost:8080")
 

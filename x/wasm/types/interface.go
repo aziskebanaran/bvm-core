@@ -15,6 +15,7 @@ type WasmKeeper interface {
     GetContractBalance(addr string, contractID string) uint64
     QueryContract(contractAddr string, method string, args ...interface{}) (interface{}, error)
     ValidateBlock(block types.Block) error
+    HandleAINFTMint(batch storage.Batch, caller string, taskID string, metaData []byte) error
 }
 
 // --- JEMBATAN KOMUNIKASI (DITAMBAHKAN) ---

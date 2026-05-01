@@ -22,6 +22,7 @@ type BVMStore interface {
     PrefixScan(prefix string) ([][]byte, error)
     NewBatch() Batch
     PutToBatch(batch Batch, key string, value interface{}) error
+    PutHistoryToBatch(batch Batch, addr string, tx types.Transaction) error
     WriteBatch(batch Batch) error
     Scan(prefix string) (map[string]interface{}, error)
 

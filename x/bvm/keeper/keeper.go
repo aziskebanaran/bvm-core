@@ -407,3 +407,13 @@ func (k *Keeper) GetCloudStorage() x.StorageModuleKeeper {
 func (k *Keeper) GetFactory() x.FactoryKeeper {
     return k.Factory
 }
+
+func (k *Keeper) extractUniqueWallets(txs []types.Transaction) int {
+    wallets := make(map[string]bool)
+    for _, tx := range txs {
+        wallets[tx.From] = true
+        // Jika Jenderal ingin menghitung penerima juga:
+        // wallets[tx.To] = true 
+    }
+    return len(wallets)
+}

@@ -4,6 +4,7 @@ import (
     "encoding/json" // 🚩 WAJIB ADA
     "fmt"
     "github.com/aziskebanaran/bvm-core/pkg/logger"
+    "github.com/aziskebanaran/bvm-core/pkg/ai"
     "github.com/aziskebanaran/bvm-core/x/bvm/types"
     bankkeeper "github.com/aziskebanaran/bvm-core/x/bank/keeper"
     banktypes "github.com/aziskebanaran/bvm-core/x/bank/types" // 🚩 WAJIB ADA
@@ -31,6 +32,14 @@ func (k *Keeper) ExecuteBlock(block types.Block) error {
 
     // --- 1. PROSES TRANSAKSI (BVM & WASM) ---
     for _, tx := range block.Transactions {
+
+
+        k.Store.PutHistoryToBatch(batch, tx.From, tx)
+        // Catat untuk Penerima
+        k.Store.PutHistoryToBatch(batch, tx.To, tx)
+        // Simpan detail TXID (untuk pencarian cepat)
+        k.Store.PutToBatch(batch, "tx:"+tx.ID, tx)
+
         // A. Potong Fee dari Pengirim
         totalFees += tx.Fee
         pendingChanges[tx.From] -= int64(tx.Fee)
@@ -285,8 +294,22 @@ func (k *Keeper) CommitBlock(block types.Block) error {
     })
 
     logger.Success("COMMIT", fmt.Sprintf("🧱 Blok #%d Sah & Bersih!", block.Index))
+
+    // --- 🤖 AKTIVASI KOMANDAN AI (TAMBAHKAN DI SINI) ---
+    // Gunakan goroutine (go ...) agar AI tidak menghambat kecepatan blockchain (Async)
+    go func() {
+        orchestrator := ai.NewOrchestrator()
+
+        // Kita hitung jumlah wallet unik dalam transaksi blok ini
+        activeWallets := k.extractUniqueWallets(block.Transactions)
+
+        // Perintahkan AI untuk melapor
+        orchestrator.ReportNewBlock(int64(block.Index), len(block.Transactions), activeWallets)
+    }()
+
     return nil
 }
+
 
 
 func (k *Keeper) CreateNextBlock(minerAddr string) types.Block {

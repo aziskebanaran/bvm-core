@@ -492,3 +492,13 @@ func (k *Keeper) GetContractBalance(addr string, contractID string) uint64 {
     return balance
 }
 
+
+// Di x/wasm/keeper/keeper.go
+func (k *Keeper) HandleAINFTMint(batch storage.Batch, caller string, taskID string, metaData []byte) error {
+    key := "nft:ai:" + taskID
+    
+    // 🚩 GUNAKAN YANG SUDAH ADA:
+    // Kita panggil PutToBatch milik Store, karena batch mentah tidak punya fungsi Put.
+    // Ini aman dan tidak merubah interface apapun!
+    return k.Store.PutToBatch(batch, key, metaData)
+}

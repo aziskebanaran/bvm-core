@@ -88,7 +88,9 @@ func (s *LevelDBStore) Get(key string, target interface{}) error {
 // 🚩 STANDAR BARU: History menggunakan prefix h:[addr]
 func (s *LevelDBStore) GetAddressHistory(addr string) ([]types.Transaction, error) {
 	var history []types.Transaction
-	prefix := []byte(fmt.Sprintf("h:%s:", addr)) // Kita samakan dengan backfill.go
+
+        prefix := []byte(fmt.Sprintf("h:%s", addr))
+
 	iter := s.db.NewIterator(util.BytesPrefix(prefix), nil)
 	defer iter.Release()
 	for iter.Next() {
@@ -145,6 +147,16 @@ func (s *LevelDBStore) PutToBatch(batch Batch, key string, value interface{}) er
         b.Put([]byte(key), data)
         return nil
 }
+
+// PutHistoryToBatch: Mencatat jejak transaksi ke dalam prefix sejarah alamat (Sesuai Konstitusi Sultan)
+func (s *LevelDBStore) PutHistoryToBatch(batch Batch, addr string, tx types.Transaction) error {
+    // Format Key: h:[ALAMAT]:[TIMESTAMP]:[TXID]
+    // Ini menjamin data terurut secara kronologis di LevelDB
+    key := fmt.Sprintf("h:%s:%d:%s", addr, tx.Timestamp, tx.ID)
+
+    return s.PutToBatch(batch, key, tx)
+}
+
 
 // Gunakan tipe Batch untuk argumen pertama
 func (s *LevelDBStore) WriteBatch(batch Batch) error {
