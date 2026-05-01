@@ -3,7 +3,6 @@ module github.com/aziskebanaran/bvm-core
 go 1.26.2
 
 require (
-	github.com/aziskebanaran/bvm-lib v0.0.0-00010101000000-000000000000
 	github.com/cbergoon/merkletree v0.2.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/joho/godotenv v1.5.1
@@ -15,6 +14,7 @@ require (
 )
 
 require (
+	github.com/aziskebanaran/bvm-lib v1.0.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
@@ -25,7 +25,5 @@ require (
 	golang.org/x/sys v0.43.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
-
-replace github.com/aziskebanaran/bvm-lib => ../bvm-lib
 
 replace github.com/google/generative-ai-go => github.com/google/generative-ai-go v0.19.0
