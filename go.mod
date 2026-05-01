@@ -26,6 +26,6 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
-replace github.com/aziskebanaran/bvm-lib => /data/data/com.termux/files/home/bvm-lib
+replace github.com/aziskebanaran/bvm-lib => ../bvm-lib
 
 replace github.com/google/generative-ai-go => github.com/google/generative-ai-go v0.19.0
