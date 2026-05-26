@@ -3,6 +3,8 @@ package types
 import (
     "crypto/sha256"
     "encoding/hex"
+    "os"
+    "strconv"
     "fmt"
     "time"
     "github.com/cbergoon/merkletree"
@@ -28,12 +30,14 @@ type Transaction struct {
 
     PublicKey string  `json:"public_key"`
     Signature string  `json:"signature"`
+    ChainID   uint64  `json:"chain_id"`
+    Relayer   string  `json:"relayer"`
 }
 
 func (t Transaction) CalculateHash() ([]byte, error) {
-    // 🚩 URUTAN SULTAN: 100% Sesuai urutan variabel di struct (Tanpa ID & Signature)
-    // Menggunakan pemisah titik dua (:) sesuai keinginan awal Sultan
-    data := fmt.Sprintf("%s:%s:%d:%d:%s:%s:%d:%d:%s:%d:%s:%s:%s",
+
+  if t.ChainID == 0 {
+        data := fmt.Sprintf("%s:%s:%d:%d:%s:%s:%d:%d:%s:%d:%s:%s:%s",
         t.From,                         // 1.  From
         t.To,                           // 2.  To
         t.Amount,                       // 3.  Amount
@@ -52,6 +56,28 @@ func (t Transaction) CalculateHash() ([]byte, error) {
     h := sha256.Sum256([]byte(data))
     return h[:], nil
 }
+
+	data := fmt.Sprintf("%s:%s:%d:%d:%s:%s:%d:%d:%s:%d:%s:%s:%s:%d",
+        t.From,                         // 1.  From
+        t.To,                           // 2.  To
+        t.Amount,                       // 3.  Amount
+        t.Fee,                          // 4.  Fee
+        t.Symbol,                       // 5.  Symbol
+        t.Memo,                         // 6.  Memo
+        t.Nonce,                        // 7.  Nonce
+        t.Timestamp,                    // 8.  Timestamp
+        t.Type,                         // 9.  Type
+        t.Layer,                        // 10. Layer
+        hex.EncodeToString(t.Payload),  // 11. Payload
+        t.ZKP_Proof,                    // 12. ZKP_Proof
+        t.PublicKey,                    // 13. PublicKey (INI DIA!)
+	t.ChainID,                      // 14.
+    )
+
+    h := sha256.Sum256([]byte(data))
+    return h[:], nil
+}
+
 
 // GetID: Fungsi pembantu untuk mendapatkan string Hex (TXID)
 func (t *Transaction) GenerateID() string {
@@ -74,14 +100,21 @@ func (t Transaction) Equals(other merkletree.Content) (bool, error) {
     return hex.EncodeToString(h1) == hex.EncodeToString(h2), nil
 }
 
-// 🚩 PERBAIKAN: Ganti float64 menjadi uint64 pada parameter 'amount' dan 'fee'
-func NewTransaction(from, to string, amount, fee uint64, symbol, memo string, nonce uint64, p Params) Transaction {
+
+// 🎯 FUNGSI 1: NewTransaction
+func NewTransaction(from, to string, amount, fee uint64, symbol, memo string, nonce uint64, chainID uint64, p Params) Transaction {
+    // 🚀 INTERCEPTOR LIVE CORE: Paksa ikuti RAM lingkungan
+    if envChainID := os.Getenv("BVM_CHAIN_ID"); envChainID != "" {
+        if val, err := strconv.ParseUint(envChainID, 10, 64); err == nil {
+            chainID = val
+        }
+    }
 
     tx := Transaction{
         From:      from,
         To:        to,
-        Amount:    amount, // ✅ SEKARANG COCOK: uint64 diisi oleh uint64
-        Fee:       fee,    // ✅ SEKARANG COCOK: uint64 diisi oleh uint64
+        Amount:    amount,
+        Fee:       fee,
         Symbol:    p.GetNative(symbol),
         Memo:      memo,
         Nonce:     nonce,
@@ -90,47 +123,210 @@ func NewTransaction(from, to string, amount, fee uint64, symbol, memo string, no
         Type:      "transfer",
         Payload:   []byte{},
         ZKP_Proof: "",
-    }
-
-    tx.ID = tx.GenerateID()
-    return tx
-}
-
-// --- Fungsi 2: Untuk Eksekusi Smart Contract (WASM) ---
-func NewContractTransaction(from, to string, fee uint64, payload []byte, nonce uint64) Transaction {
-    tx := Transaction{
-        From:      from,
-        To:        to,              // Alamat Kontrak (bvmwasm...)
-        Amount:    0,               // Kontrak biasanya tidak mengirim saldo utama
-        Fee:       fee,             // Biaya eksekusi
-        Symbol:    "BVM",           // Biaya selalu dibayar pakai native token
-        Nonce:     nonce,
-        Timestamp: time.Now().Unix(),
-        Type:      "contract_call", // Penanda untuk WASM Keeper
-        Payload:   payload,         // Data perintah untuk kontrak
-        Layer:     1,
+        ChainID:   chainID,
     }
     tx.ID = tx.GenerateID()
     return tx
 }
 
-// --- Fungsi 3: Untuk Pendaftaran User Baru (Identity) ---
-func NewRegisterTransaction(from, username string, fee uint64, nonce uint64) Transaction {
-    // Kita bungkus username ke dalam Payload agar ID transaksi tetap unik
-    payload := []byte(fmt.Sprintf(`{"username":"%s"}`, username))
+
+// 🎯 FUNGSI 2: NewContractTransaction
+func NewContractTransaction(from, to string, fee uint64, payload []byte, nonce uint64, chainID uint64) Transaction {
+    if envChainID := os.Getenv("BVM_CHAIN_ID"); envChainID != "" {
+        if val, err := strconv.ParseUint(envChainID, 10, 64); err == nil {
+            chainID = val
+        }
+    }
 
     tx := Transaction{
         From:      from,
-        To:        "SYSTEM_AUTH",    // Alamat virtual untuk registrasi
-        Amount:    0,                // Daftar tidak butuh kirim koin ke siapa-siapa
-        Fee:       fee,              // Biaya administrasi pendaftaran
+        To:        to,
+        Amount:    0,
+        Fee:       fee,
         Symbol:    "BVM",
         Nonce:     nonce,
         Timestamp: time.Now().Unix(),
-        Type:      "user_register",  // Kode kunci untuk AuthKeeper
+        Type:      "contract_call",
+        Payload:   payload,
+        Layer:     1,
+        ChainID:   chainID,
+    }
+    tx.ID = tx.GenerateID()
+    return tx
+}
+
+
+// 🎯 FUNGSI 3: NewRegisterTransaction
+func NewRegisterTransaction(from, username string, fee uint64, nonce uint64, chainID uint64) Transaction {
+    if envChainID := os.Getenv("BVM_CHAIN_ID"); envChainID != "" {
+        if val, err := strconv.ParseUint(envChainID, 10, 64); err == nil {
+            chainID = val
+        }
+    }
+
+    payload := []byte(fmt.Sprintf(`{"username":"%s"}`, username))
+    tx := Transaction{
+        From:      from,
+        To:        "SYSTEM_AUTH",
+        Amount:    0,
+        Fee:       fee,
+        Symbol:    "BVM",
+        Nonce:     nonce,
+        Timestamp: time.Now().Unix(),
+        Type:      "user_register",
         Payload:   payload,
         Layer:     1,
         Memo:      fmt.Sprintf("Register User: %s", username),
+        ChainID:   chainID,
+    }
+    tx.ID = tx.GenerateID()
+    return tx
+}
+
+
+// 🎯 FUNGSI 4: NewUTXOMoveTransaction
+func NewUTXOMoveTransaction(from, to string, amount, fee uint64, symbol string, inputs []string, memo string, nonce uint64, timestamp int64, chainID uint64) Transaction {
+    if envChainID := os.Getenv("BVM_CHAIN_ID"); envChainID != "" {
+        if val, err := strconv.ParseUint(envChainID, 10, 64); err == nil {
+            chainID = val
+        }
+    }
+
+    inputStr := ""
+    for i, in := range inputs {
+        inputStr += fmt.Sprintf("\"%s\"", in)
+        if i < len(inputs)-1 {
+            inputStr += ","
+        }
+    }
+    payloadStr := fmt.Sprintf("{\"inputs\":[%s]}", inputStr)
+    payload := []byte(payloadStr)
+
+    tx := Transaction{
+        From:      from,
+        To:        to,
+        Amount:    amount,
+        Fee:       fee,
+        Symbol:    symbol,
+        Memo:      memo,
+        Nonce:     nonce,
+        Timestamp: timestamp,
+        Type:      "utxo_move",
+        Layer:     2,
+        Payload:   payload,
+        ChainID:   chainID,
+    }
+    tx.ID = tx.GenerateID()
+    return tx
+}
+
+// 🎯 FUNGSI 5: NewRelayerTransaction
+func NewRelayerTransaction(mempoolAddr string, actionType string, payload []byte, nonce uint64, chainID uint64) Transaction {
+    if envChainID := os.Getenv("BVM_CHAIN_ID"); envChainID != "" {
+        if val, err := strconv.ParseUint(envChainID, 10, 64); err == nil {
+            chainID = val
+        }
+    }
+
+    tx := Transaction{
+        From:      mempoolAddr,
+        To:        "SYSTEM_REWARD_HUB",
+        Amount:    0,
+        Fee:       0,
+        Symbol:    "BVM",
+        Nonce:     nonce,
+        Timestamp: time.Now().Unix(),
+        Type:      "mempool_report",
+        Layer:     1,
+        Payload:   payload,
+        ChainID:   chainID,
+        Relayer:   mempoolAddr,
+    }
+    tx.ID = tx.GenerateID()
+    return tx
+}
+
+// 🎯 FUNGSI 6: NewBridgeOutTransaction (User berangkat)
+func NewBridgeOutTransaction(from, to string, amount, fee uint64, symbol string, targetChainID uint64, nonce uint64, currentChainID uint64) Transaction {
+    if envChainID := os.Getenv("BVM_CHAIN_ID"); envChainID != "" {
+        if val, err := strconv.ParseUint(envChainID, 10, 64); err == nil {
+            currentChainID = val
+        }
+    }
+
+    // Payload menyimpan informasi tiket tujuan
+    payloadStr := fmt.Sprintf(`{"target_chain_id":%d}`, targetChainID)
+    
+    tx := Transaction{
+        From:      from,
+        To:        to,     // Alamat tujuan di chain seberang
+        Amount:    amount,
+        Fee:       fee,
+        Symbol:    symbol,
+        Nonce:     nonce,
+        Timestamp: time.Now().Unix(),
+        Type:      "bridge_out", // 🚩 Langsung tulis string-nya di sini
+        Layer:     1,
+        Payload:   []byte(payloadStr),
+        ChainID:   currentChainID,
+    }
+    tx.ID = tx.GenerateID()
+    return tx
+}
+
+// 🎯 FUNGSI 7: NewBridgeInTransaction (Paket tiba dari Nexus)
+func NewBridgeInTransaction(nexusAddr, to string, amount uint64, symbol string, refTxID string, nonce uint64, currentChainID uint64) Transaction {
+    if envChainID := os.Getenv("BVM_CHAIN_ID"); envChainID != "" {
+        if val, err := strconv.ParseUint(envChainID, 10, 64); err == nil {
+            currentChainID = val
+        }
+    }
+
+    // Payload menyimpan bukti ID Transaksi dari chain asal untuk cegah double-claim
+    payloadStr := fmt.Sprintf(`{"ref_tx_id":"%s"}`, refTxID)
+
+    tx := Transaction{
+        From:      nexusAddr, // Yang menandatangani adalah Nexus Relayer!
+        To:        to,        // Penerima akhir
+        Amount:    amount,
+        Fee:       0,         // Fee digratiskan karena sudah dibayar di rantai asal
+        Symbol:    symbol,
+        Nonce:     nonce,
+        Timestamp: time.Now().Unix(),
+        Type:      "bridge_in", // 🚩 Langsung tulis string-nya di sini
+        Layer:     1,
+        Payload:   []byte(payloadStr),
+        ChainID:   currentChainID,
+        Relayer:   nexusAddr,
+    }
+    tx.ID = tx.GenerateID()
+    return tx
+}
+
+// 🎯 FUNGSI 8: NewSubmitProofTransaction (Bukti dari Nexus ke BVM)
+func NewSubmitProofTransaction(relayerAddr string, refTxID string, sourceChainID uint64, nonce uint64, chainID uint64) Transaction {
+    if envChainID := os.Getenv("BVM_CHAIN_ID"); envChainID != "" {
+        if val, err := strconv.ParseUint(envChainID, 10, 64); err == nil {
+            chainID = val
+        }
+    }
+
+    // Payload menyimpan bukti bahwa transaksi di rantai asal sudah dikunci
+    payloadStr := fmt.Sprintf(`{"ref_tx_id":"%s", "source_chain_id":%d}`, refTxID, sourceChainID)
+
+    tx := Transaction{
+        From:      relayerAddr,
+        To:        "SYSTEM_BRIDGE", // Alamat sistem untuk memproses bukti
+        Amount:    0,
+        Fee:       0,
+        Symbol:    "BVM",
+        Nonce:     nonce,
+        Timestamp: time.Now().Unix(),
+        Type:      "submit_proof", // 🚩 Langsung menggunakan string sesuai pola fungsi lainnya
+        Layer:     1,
+        Payload:   []byte(payloadStr),
+        ChainID:   chainID,
+        Relayer:   relayerAddr,
     }
     tx.ID = tx.GenerateID()
     return tx

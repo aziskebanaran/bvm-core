@@ -3,6 +3,8 @@ package events
 import (
     "github.com/aziskebanaran/bvm-core/x/bvm/types"
     "fmt"
+	"encoding/json"
+	eventstypes "github.com/aziskebanaran/bvm-core/x/events/types"
 )
 
 // --- 1. DEFINISI KEEPER (PONDASI UTAMA) ---
@@ -76,23 +78,51 @@ func (k *Keeper) GetRequiredDifficulty(minerAddr string) int {
     return params.MinDifficulty
 }
 
-// EmitEvent: Pengeras suara universal untuk seluruh modul BVM
-// Fungsi ini harus diawali huruf KAPITAL agar bisa diakses dari luar folder events
-func EmitEvent(eventType string, data interface{}) {
-    // 1. Cetak ke Console (Agar Sultan bisa memantau secara real-time)
-    fmt.Printf("\n📢 [EVENT LOG] Type: %s\n", eventType)
-    
-    // 2. Jika data berupa Map, tampilkan isinya secara rapi
-    if m, ok := data.(map[string]interface{}); ok {
-        for key, val := range m {
-            fmt.Printf("   🔹 %s: %v\n", key, val)
-        }
-    } else {
-        fmt.Printf("   🔹 Data: %+v\n", data)
-    }
-    fmt.Println("--------------------------------------------")
 
-    // 💡 TIPS SULTAN: 
-    // Di sini Sultan bisa menambahkan logika untuk menyimpan event ke Database
-    // atau mengirim notifikasi Push ke aplikasi DompetKu Sultan.
+// =========================================================================
+// 📡 FUNGSI 1: EmitEvent (Gaya Lama - Murni Log Console)
+// =========================================================================
+// Tetap pertahankan 2 argumen ini agar modul P2P Jenderal Lolos Sensor 100%!
+func EmitEvent(eventType string, data interface{}) {
+	fmt.Printf("\n📢 [SYSTEM LOG] Type: %s\n", eventType)
+
+	if m, ok := data.(map[string]interface{}); ok {
+		for key, val := range m {
+			fmt.Printf("   🔹 %s: %v\n", key, val)
+		}
+	} else {
+		fmt.Printf("   🔹 Data: %+v\n", data)
+	}
+	fmt.Println("--------------------------------------------")
+}
+
+// =========================================================================
+// 🪙 FUNGSI 2: EmitBatch (Gaya Baru Khusus Keuangan - Wajib Pahat LevelDB)
+// =========================================================================
+// Nama fungsi baru sesuai komando Jenderal, menerima 3 argumen untuk disk!
+func EmitBatch(batch interface{}, eventType string, data interface{}) {
+	fmt.Printf("\n📢 [STATE EVENT] Type: %s\n", eventType)
+
+	if m, ok := data.(map[string]interface{}); ok {
+		for key, val := range m {
+			fmt.Printf("   🔹 %s: %v\n", key, val)
+		}
+	}
+	fmt.Println("--------------------------------------------")
+
+	if batch != nil {
+		type BatchWriter interface {
+			Put(key []byte, value []byte)
+		}
+
+		if b, ok := batch.(BatchWriter); ok {
+			eventObj := eventstypes.NewEvent(eventType, data)
+			keyDB := fmt.Sprintf("ev:%s:%s", eventType, eventObj.ID)
+
+			importJSON, errMarshal := json.Marshal(eventObj)
+			if errMarshal == nil {
+				b.Put([]byte(keyDB), importJSON)
+			}
+		}
+	}
 }

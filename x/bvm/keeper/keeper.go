@@ -3,6 +3,8 @@ package keeper
 import (
 	"strings"
 	"crypto/sha256"
+	"sync"
+	"time"
 
 	"github.com/aziskebanaran/bvm-core/pkg/logger"
 	"github.com/aziskebanaran/bvm-core/pkg/storage"
@@ -19,7 +21,9 @@ type Keeper struct {
         TotalSupplyBVM uint64
         TotalBurnedBVM uint64
 
-	// Rantai Komando (Menteri-Menteri Sultan)
+        ActiveMinersMu sync.RWMutex
+        ActiveMiners   map[string]int64
+
 	NonceMgr x.NonceKeeper
 	Bank     x.BankKeeper
 	Auth     x.AuthKeeper
@@ -29,6 +33,8 @@ type Keeper struct {
 	P2P      x.P2PKeeper
         Storage  x.StorageModuleKeeper
 	Factory x.FactoryKeeper
+	UTXO    x.UTXOKeeper
+	Bridge   x.BridgeKeeper
 }
 
 func NewKeeper(
@@ -44,6 +50,8 @@ func NewKeeper(
 	pk x.P2PKeeper,
         stk x.StorageModuleKeeper,
 	fk x.FactoryKeeper,
+	uk x.UTXOKeeper,
+	bridgeK x.BridgeKeeper,
 ) *Keeper {
 	k := &Keeper{
 		Store:      store,
@@ -58,6 +66,10 @@ func NewKeeper(
 		P2P:        pk,
                 Storage:    stk,
 		Factory: fk,
+		UTXO:       uk,
+		Bridge:     bridgeK,
+
+		ActiveMiners: make(map[string]int64),
 	}
 
 	k.InitialSync()
@@ -99,9 +111,35 @@ func (k *Keeper) InitialSync() {
 }
 
 func (k *Keeper) ProcessTransaction(tx types.Transaction) error {
+    // 🚩 PINTU VIP JEMBATAN (BRIDGE)
+    isBridgeTx := tx.Type == "bridge_in" || tx.Type == "submit_proof"
+
+    // Jika ini transaksi bridge, lewati verifikasi signature & nonce untuk debugging
+    if isBridgeTx {
+        return k.Mempool.Add(tx)
+    }
+
     // 1. Validasi Signature
     if !k.Auth.VerifyTransaction(tx) {
         return fmt.Errorf("❌ INVALID SIGNATURE: Hash transaksi tidak cocok dengan tanda tangan")
+    }                                                                                                         // 🚩 PINTU VIP UTXO (0x): Langsung lewat tanpa Firewall Nonce
+  // 🚩 PENYEMPURNAAN JALUR VIP UTXO
+    isUTXO := strings.HasPrefix(tx.From, "0x") || tx.Type == "utxo_move"
+
+    if isUTXO {
+        // A. Cek Ketersediaan Kepingan (PENTING!)
+        // Jangan biarkan kepingan double-spend masuk ke Mempool
+        if !k.UTXO.IsInputAvailable(tx) {
+            return fmt.Errorf("🚨 Kepingan aset sudah terpakai atau tidak valid!")
+        }
+
+        // B. Cek Minimal Fee (Pencegahan Spam)
+        // Walau UTXO, Fee tetap harus divalidasi agar validator mau kerja
+        if tx.Fee < k.Params.MinGasPrice {
+            return fmt.Errorf("🚨 Fee terlalu rendah untuk Jalur VIP")
+        }
+
+        return k.Mempool.Add(tx)
     }
 
     // 2. LOGIKA FIREWALL NONCE
@@ -120,13 +158,13 @@ func (k *Keeper) ProcessTransaction(tx types.Transaction) error {
     }
 
     // B. Filter Lompatan (Mencegah Gap)
-    // Sultan hanya boleh kirim Nonce yang urut, 
+    // Sultan hanya boleh kirim Nonce yang urut,
     // ATAU mengirim ulang Nonce yang sedang mengantre (untuk Update/Replace).
     if tx.Nonce > expectedNextNonce {
         return fmt.Errorf("❌ NONCE JUMP: Harusnya %d, Anda kirim %d", expectedNextNonce, tx.Nonce)
     }
 
-    // 🚩 CATATAN: Filter "DUPLICATE" dihapus dari sini! 
+    // 🚩 CATATAN: Filter "DUPLICATE" dihapus dari sini!
     // Kita serahkan ke Mempool.Add(tx) untuk melakukan replaceIfDuplicate.
     // 3. CEK SALDO (Filter Ekonomi)
     // Ingat Jenderal: Pengirim harus punya saldo untuk (Amount + Fee)
@@ -150,23 +188,87 @@ func (k *Keeper) ProcessTransaction(tx types.Transaction) error {
     return nil
 }
 
+func (k *Keeper) ProcessUTXOTransaction(tx types.Transaction) error {
+    logger.Info("DEBUG", "🔍 Memulai validasi VIP untuk TX: "+tx.ID[:8])
+
+    // 1. Validasi Signature
+    if !k.Auth.VerifyTransactionUTXO(tx) {
+        logger.Error("DEBUG", "❌ Gagal di Signature")
+        return fmt.Errorf("❌ INVALID SIGNATURE UTXO")
+    }
+
+    // 2. Cek Tipe
+    if tx.Type != "utxo_move" && tx.Type != "transfer" {
+        logger.Error("DEBUG", "❌ Gagal di Tipe: "+tx.Type)
+        return fmt.Errorf("❌ ILLEGAL TYPE")
+    }
+
+    // 3. Cek Kepingan
+    if !k.UTXO.IsInputAvailable(tx) {
+        logger.Error("DEBUG", "❌ Gagal di Input: Kepingan tidak tersedia di database")
+        return fmt.Errorf("🚨 Kepingan aset tidak valid!")
+    }
+
+    // 🚩 KALIBRASI PERTAHANAN SULTAN: Cegah Eksploitasi Spam Jalur VIP UTXO!
+    // Pastikan Miner tetap mendapatkan upah yang adil sesuai Konstitusi L1 Params
+    if k.Params != nil && tx.Fee < k.Params.MinGasPrice {
+        logger.Error("DEBUG", fmt.Sprintf("❌ Gagal di Validasi Ekonomi: Fee %d kurang dari MinGasPrice %d", tx.Fee, k.Params.MinGasPrice))
+        return fmt.Errorf("🚨 Fee terlalu rendah untuk Jalur VIP UTXO!")
+    }
+
+    // 4. Masuk Antrean
+    logger.Info("MEMPOOL", "💎 Mencoba memasukkan ke antrean...")
+    if err := k.Mempool.Add(tx); err != nil {
+        logger.Error("DEBUG", "❌ Gagal di Mempool.Add: "+err.Error())
+        return fmt.Errorf("🚨 Gagal masuk Mempool: %v", err)
+    }
+
+    logger.Success("MEMPOOL", "📥 Berhasil! Cek './bvm mempool' sekarang.")
+    return nil
+}
 
 func (k *Keeper) GetSecureBalance(address string) (types.WalletState, bool) {
     balanceAtomic := k.GetBalanceBVM(address)
-
     nonce := k.GetNextNonce(address)
 
     if balanceAtomic == 0 && nonce == 0 {
         return types.WalletState{}, false
     }
 
+    // 🚩 PERBAIKAN: Mengambil simbol dari Params, bukan hardcode "BVM"
+    nativeSymbol := k.Params.NativeSymbol
+
     return types.WalletState{
         Address:        address,
         BalanceAtomic:  balanceAtomic,
         BalanceDisplay: k.Params.FormatDisplay(balanceAtomic),
         Nonce:          nonce,
-        Symbol:         k.Params.NativeSymbol,
+        Symbol:         nativeSymbol, // ✅ Dinamis sesuai Params
         Status:         "active",
+        Type:           "ACCOUNT_BASED",
+    }, true
+}
+
+func (k *Keeper) GetSecureBalanceUTXO(address string) (types.WalletState, bool) {
+    // 1. Ambil saldo (Hanya tangkap 1 variabel sesuai fungsi aslinya)
+    nativeSymbol := k.Params.NativeSymbol
+    balanceAtomic := k.UTXO.GetTotalBalance(address, nativeSymbol)
+
+    // 2. Filter: Jika saldo kosong, berarti alamat tidak punya kepingan di 0x
+    if balanceAtomic == 0 {
+        return types.WalletState{}, false
+    }
+
+    // 3. Rakit WalletState dengan kedaulatan UTXO
+    return types.WalletState{
+        Address:        address,
+        BalanceAtomic:  balanceAtomic,
+        BalanceDisplay: k.Params.FormatDisplay(balanceAtomic),
+        Symbol:         nativeSymbol,
+        Nonce:          0,             // 🚩 Wilayah merdeka Nonce
+        Status:         "active",
+        Type:           "UTXO_BASED",
+        UTXOCount:      0,             // Sementara kita nol kan sampai Jenderal update k.UTXO
     }, true
 }
 
@@ -288,6 +390,10 @@ func (k *Keeper) GetStore() storage.BVMStore {
     return k.Store
 }
 
+func (k *Keeper) GetUTXO() x.UTXOKeeper {
+    return k.UTXO
+}
+
 
 // --- 2. LOGIKA BLOCKCHAIN ---
 
@@ -386,16 +492,28 @@ func (k *Keeper) GetValidatorObjects() ([]staketypes.Validator, error) {
 }
 
 func (k *Keeper) GetValidatorCount() int {
-    // 🚩 PERBAIKAN: Nama fungsi harus presisi sesuai interface
-    validators := k.Staking.GetValidators() 
-    count := len(validators)
+    // 🎯 PENERJEMAH SAKRAL SULTAN (BERBASIS RAM REAL-TIME)
+    // Kita panggil fungsi internal k.GetActiveMiners() yang sudah Jenderal buat dengan aman di bawah
+    activeMiners := k.GetActiveMiners()
+    now := time.Now().Unix()
 
-    // Safety guard: Jika jaringan baru berjalan atau daftar kosong
-    if count < 1 {
+    realActiveCount := 0
+    for _, lastPing := range activeMiners {
+        // Hanya hitung miner/validator yang detak jantungnya segar di bawah 180 detik (3 menit)
+        if now - lastPing < 180 {
+            realActiveCount++
+        }
+    }
+
+    // Safety guard: Jika miner kedua mati atau hanya ada internal miner tunggal
+    // Kembali ke angka 1 agar params mengembalikan 10 BVM utuh
+    if realActiveCount <= 1 {
         return 1
     }
-    return count
+
+    return realActiveCount
 }
+
 
 // 🚩 PERBAIKAN: Gunakan (k *Keeper) bukan BaseKeeper
 func (k *Keeper) GetCloudStorage() x.StorageModuleKeeper {
@@ -418,6 +536,11 @@ func (k *Keeper) extractUniqueWallets(txs []types.Transaction) int {
     return len(wallets)
 }
 
+func (k *Keeper) GetRegisteredVaults() []string {
+    // Pastikan Storage adalah objek yang memiliki metode GetVaultList()
+    // Karena field Anda di struct adalah 'Storage', maka panggilannya:
+    return k.Storage.GetVaultList()
+}
 
 func (k *Keeper) InitSystemVaults() {
     vaultAddr := "bvmf_market_system_vault"
@@ -438,4 +561,32 @@ func (k *Keeper) InitSystemVaults() {
             fmt.Printf("🏦 [SYSTEM] Brankas Market berhasil diaktifkan: %s\n", vaultAddr)
         }
     }
+}
+
+
+// 👑 SUNTIKKAN METODE BARU: Agar api/mempool.go bisa memasukkan data lewat Interface x.BVMKeeper!
+func (k *Keeper) UpdateActiveMiner(address string, timestamp int64) {
+        k.ActiveMinersMu.Lock()
+        k.ActiveMiners[address] = timestamp
+        k.ActiveMinersMu.Unlock()
+}
+
+// 👑 SUNTIKKAN METODE BARU: Agar reward.go bisa menyedot data RAM dengan aman
+func (k *Keeper) GetActiveMiners() map[string]int64 {
+        k.ActiveMinersMu.RLock()
+        defer k.ActiveMinersMu.RUnlock()
+        
+        // Kita kloning map-nya demi keamanan data bersama
+        clone := make(map[string]int64)
+        for addr, ts := range k.ActiveMiners {
+                clone[addr] = ts
+        }
+        return clone
+}
+
+// 👑 SUNTIKKAN METODE BARU: Untuk membersihkan miner yang sudah expired dari RAM
+func (k *Keeper) DeleteActiveMiner(address string) {
+        k.ActiveMinersMu.Lock()
+        delete(k.ActiveMiners, address)
+        k.ActiveMinersMu.Unlock()
 }

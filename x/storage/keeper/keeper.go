@@ -130,3 +130,20 @@ func (k *StorageKeeper) CalculateStorageFee(dataSize int, bvm x.BVMKeeper) uint6
     // Konversi langsung ke unit terkecil (Atomic) menggunakan mesin Kernel
     return bvm.ToAtomic(rawTotal)
 }
+
+
+func (k *StorageKeeper) GetVaultList() []string {
+    var vaultAddresses []string
+    // Kita simpan daftar vault dengan key khusus "global:vault_list"
+    err := k.mainStore.Get("global:vault_list", &vaultAddresses)
+    if err != nil {
+        // Fallback jika belum ada daftar (karena baru pertama kali setup)
+        return []string{"bvmf_market_system_vault"} 
+    }
+    return vaultAddresses
+}
+
+// Fungsi untuk admin/proposal governance menambah/mengubah vault
+func (k *StorageKeeper) SetVaultList(newVaults []string) error {
+    return k.mainStore.Put("global:vault_list", newVaults)
+}

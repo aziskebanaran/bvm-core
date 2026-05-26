@@ -13,46 +13,84 @@ import (
 	"github.com/joho/godotenv"
 )
 
-var nodeCmd = &cobra.Command{
-	Use:   "node",
-	Short: "Manajemen Node/Kernel BVM",
-}
+// =========================================================================
+// 🛡️ BENTENG VARIABEL GLOBAL SULTAN (TERKUNCI DI SINI)
+// =========================================================================
+var bvmClient *client.BVMClient
 
-var walletCmd = &cobra.Command{
-	Use:   "wallet",
-	Short: "Manajemen dompet BVM",
-}
+// Inisialisasi Grup Perintah Utama Cobra (Hanya dideklarasikan SATU KALI)
+var (
+	rootCmd   = &cobra.Command{Use: "bvm", Short: constants.ProjectName + " CLI Control Center"}
+	walletCmd = &cobra.Command{Use: "wallet", Short: "Manajemen dompet BVM"}
+	nodeCmd   = &cobra.Command{Use: "node", Short: "Manajemen Node/Kernel BVM"}
+	minerCmd  = &cobra.Command{Use: "miner", Short: "Manajemen Pekerja Tambang BVM"}
+)
 
 func main() {
-    // --- 🛡️ OPERASI LOAD KONFIGURASI ---
-    err := godotenv.Load()
-    if err != nil {
-        fmt.Println("ℹ️  Info: Menjalankan tanpa file .env, pastikan variabel sudah di-export.")
-    } else {
-        fmt.Println("✅ [SYSTEM] Konfigurasi .env berhasil dimuat.")
-    }
+	// --- 🛡️ OPERASI LOAD KONFIGURASI ---
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Println("ℹ️  Info: Menjalankan tanpa file .env, pastikan variabel sudah di-export.")
+	} else {
+		fmt.Println("✅ [SYSTEM] Konfigurasi .env berhasil dimuat.")
+	}
 
-    // 1. Inisialisasi Client
-    bvmClient := client.NewBVMClient("http://localhost:8080")
+	// =========================================================================
+	// 📡 BENTENG SATU PINTU PUSAT: AUTO-DETECT NETWORK HUB
+	// =========================================================================
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		isTestnet, _ := cmd.Flags().GetBool("testnet")
+		homeDir, _ := cmd.Flags().GetString("home")
 
-    // 2. 🛡️ OPERASI AUTO-LOAD SESSION (Tambahkan di sini)
-    // Kita ambil jalur folder data dari flag atau default ./data
-    tokenPath := "./data/session.jwt"
-    tokenData, err := os.ReadFile(tokenPath)
-    if err == nil {
-        bvmClient.Token = string(tokenData)
-        // Opsional: fmt.Println("🎫 Sesi aktif dimuat otomatis.") 
-    }
+		// 1. KUNCI LOGIKA: Definisi Mutlak per Lingkungan
+		var nodeURL, nexusURL string
+		if isTestnet {
+			nodeURL = "http://localhost:8081"  // Core Testnet
+			nexusURL = "http://localhost:9094" // Nexus Gateway Testnet
+		} else {
+			nodeURL = "http://localhost:8080"  // Core Mainnet
+			nexusURL = "http://localhost:9092" // Nexus Gateway Mainnet
+		}
 
-    // 3. Konfigurasi Cobra seperti biasa
-    var rootCmd = &cobra.Command{
-        Use:   "bvm",
-        Short: constants.ProjectName + " CLI Control Center",
-    }
+		// 2. Override jika user memaksa dengan flag --nexus
+		if cmd.Flags().Changed("nexus") {
+			nexusURL, _ = cmd.Flags().GetString("nexus")
+		}
 
-	// 🚩 FLAG PERSISTEN: Tersedia untuk SEMUA sub-command (Node, Wallet, Mempool, dll)
-	rootCmd.PersistentFlags().StringP("home", "H", "./data", "Jalur folder data utama (database & wallet)")
-	rootCmd.PersistentFlags().StringP("nexus", "n", "http://localhost:9092", "Alamat Nexus Server untuk sinkronisasi")
+		// 3. PENYESUAIAN DIREKTORI DATA
+		if isTestnet && homeDir == "./data" {
+			_ = cmd.Flags().Set("home", "./data/testnet")
+			homeDir = "./data/testnet"
+		}
+
+		// 4. SETEL LINGKUNGAN KERNEL
+		if isTestnet {
+			os.Setenv("BVM_CHAIN_ID", "9999")
+			os.Setenv("BVM_NETWORK_NAME", "BVM Atomic Testnet")
+			fmt.Printf("🧪 [NETWORK HUB] Koordinat Terkunci: BVM Testnet (ChainID: 9999) | Port: 8081\n")
+		} else {
+			os.Setenv("BVM_CHAIN_ID", "1989")
+			os.Setenv("BVM_NETWORK_NAME", "BVM Mainnet")
+			fmt.Printf("🛡️ [NETWORK HUB] Koordinat Terkunci: BVM Mainnet (ChainID: 1989) | Port: 8080\n")
+		}
+
+		// 5. PENETAPAN GLOBAL
+		bvmClient = client.NewBVMClient(nodeURL)
+		os.Setenv("NEXUS_URL", nexusURL)
+		fmt.Printf("🌐 Nexus Point: %s\n", nexusURL)
+
+		// 6. Muat Sesi (JWT)
+		tokenPath := fmt.Sprintf("%s/session.jwt", homeDir)
+		if tokenData, err := os.ReadFile(tokenPath); err == nil {
+			bvmClient.Token = string(tokenData)
+		}
+	}
+
+	// 🚩 FLAG PERSISTEN GLOBAL
+	rootCmd.PersistentFlags().StringP("home", "H", "./data", "Jalur folder data utama")
+	rootCmd.PersistentFlags().StringP("nexus", "n", "", "Alamat Nexus Server manual")
+	rootCmd.PersistentFlags().Bool("testnet", false, "Jalankan di ekosistem BVM Testnet (ChainID: 9999)")
+
 
 	// ==========================================
 	// 1. SUB-COMMAND WALLET
@@ -270,6 +308,66 @@ var loginCmd = &cobra.Command{
     },
 }
 
+var bridgeCmd = &cobra.Command{
+    Use:   "bridge",
+    Short: "Cross-Chain Bridge: Pindahkan aset antar jaringan BVM (1989 <-> 9999)",
+    Run: func(cmd *cobra.Command, args []string) {
+        h, _ := cmd.Flags().GetString("home")
+        walletFile := fmt.Sprintf("%s/node_wallet.json", h)
+
+        targetChainID, _ := cmd.Flags().GetString("chain")
+        targetAddr, _ := cmd.Flags().GetString("to")
+        amountFloat, _ := cmd.Flags().GetFloat64("amount")
+
+        // 1. Muat Dompet
+        w, err := wallet.LoadWallet(walletFile)
+        if err != nil {
+            fmt.Printf("❌ Error: %s tidak ditemukan!\n", walletFile)
+            return
+        }
+
+        currentChainID := os.Getenv("BVM_CHAIN_ID")
+        if targetChainID == currentChainID {
+            fmt.Printf("❌ Ditolak: Anda sudah berada di Chain %s!\n", currentChainID)
+            return
+        }
+
+        // 2. Skala Atomik
+        amountAtomic := types.Params{}.ToAtomic(fmt.Sprintf("%.8f", amountFloat))
+
+        // 3. 🛡️ ALAMAT BRANKAS & MEMO (Wajib ada!)
+        ibcBridgeVault := "bvmf_ibc_bridge_vault"
+        memo := fmt.Sprintf("IBC_TRANSFER|%s|%s", targetChainID, targetAddr)
+
+        fmt.Println("---------------------------------------")
+        fmt.Printf("🌉 BVM INTER-CHAIN COMMUNICATION (IBC) INITIATED\n")
+        fmt.Printf("📡 Dari Jaringan: BVM Chain %s\n", currentChainID)
+        fmt.Printf("🌌 Ke Jaringan  : BVM Chain %s\n", targetChainID)
+        fmt.Printf("📍 Alamat Tujuan: %s\n", targetAddr)
+        fmt.Printf("💎 Jumlah       : %.8f BVM\n", amountFloat)
+        fmt.Println("---------------------------------------")
+        fmt.Println("⏳ Mengunci aset di Vault & membungkus paket IBC...")
+
+        // 5. Tanda tangani paket IBC menggunakan variabel yang sudah disiapkan
+        tx, err := w.SignBridgeOutTX(bvmClient, ibcBridgeVault, memo, amountAtomic, "BVM")
+        if err != nil {
+            fmt.Printf("❌ Gagal merakit paket IBC: %v\n", err)
+            return
+        }
+
+        // 6. Broadcast
+        txID, err := bvmClient.BroadcastBridgeOut(tx)
+        if err != nil {
+            fmt.Printf("❌ Gagal menembus portal: %v\n", err)
+            return
+        }
+
+        fmt.Printf("🚀 Paket IBC Sukses Terkirim!\n")
+        fmt.Printf("🔗 TXID Portal: %s\n", txID)
+        fmt.Println("🛰️ Relayer (Nexus) akan segera memproses pencetakan di rantai tujuan.")
+    },
+}
+
 
 
 	// ==========================================
@@ -298,20 +396,36 @@ var loginCmd = &cobra.Command{
 		},
 	}
 
-	// ==========================================
-	// 3. FINALISASI
-	// ==========================================
 
-	sendCmd.Flags().StringP("to", "t", "", "Alamat tujuan")
-	sendCmd.Flags().Float64P("amount", "a", 0.0, "Jumlah BVM")
-	sendCmd.MarkFlagRequired("to")
-	sendCmd.MarkFlagRequired("amount")
+        // 3. FINALISASI & PENGIKATAN FLAG (BERSIH & AMAN)
+        // ==========================================
 
-	startNodeCmd.Flags().BoolP("miner", "m", false, "Aktifkan Miner Internal")
 
-	walletCmd.AddCommand(createWalletCmd, balanceCmd, searchCmd, sendCmd, registerCmd, loginCmd)
-	nodeCmd.AddCommand(startNodeCmd)
-	rootCmd.AddCommand(walletCmd, nodeCmd, mempoolCmd)
+        sendCmd.Flags().StringP("to", "t", "", "Alamat tujuan")
+        sendCmd.Flags().Float64P("amount", "a", 0.0, "Jumlah BVM")
+        _ = sendCmd.MarkFlagRequired("to")
+        _ = sendCmd.MarkFlagRequired("amount")
+
+        // 🚩 BENTENG FLAG UNTUK BRIDGE (IBC-LITE)
+        bridgeCmd.Flags().StringP("chain", "c", "9999", "ChainID tujuan (contoh: 9999 untuk Testnet, 1989 untuk Mainnet)")
+        bridgeCmd.Flags().StringP("to", "t", "", "Alamat tujuan di rantai seberang (wajib)")
+        bridgeCmd.Flags().Float64P("amount", "a", 0.0, "Jumlah aset yang ingin diseberangkan")
+        _ = bridgeCmd.MarkFlagRequired("to")
+        _ = bridgeCmd.MarkFlagRequired("amount")
+
+        // 🚀 PASANG KEMBALI PELATUK MINER DI KANDUNGAN NODE START
+        startNodeCmd.Flags().BoolP("miner", "m", false, "Aktifkan Miner Internal Gabungan")
+
+        // 🚩 PASANG FLAG PORT DINAMIS (Wajib Agar Bisa Dibaca oleh node.go)
+        startNodeCmd.Flags().Int("api-port", 8080, "Port API Server (Mainnet: 8080, Testnet: 8081)")
+        startNodeCmd.Flags().Int("p2p-port", 9090, "Port P2P Engine (Mainnet: 9090, Testnet: 9091)")
+
+        // 🚩 MASUKKAN KE WALLET CMD
+        walletCmd.AddCommand(createWalletCmd, balanceCmd, searchCmd, sendCmd, registerCmd, loginCmd, bridgeCmd)
+
+        nodeCmd.AddCommand(startNodeCmd)
+
+        rootCmd.AddCommand(walletCmd, nodeCmd, mempoolCmd)
 
 // ==========================================
 // 4. SUB-COMMAND APP (Sistem "Aplikasi dalam Aplikasi")

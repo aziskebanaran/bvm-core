@@ -30,7 +30,15 @@ func HandleSend(k x.BVMKeeper) http.HandlerFunc {
         // Biarkan Kernel yang memverifikasi ID aslinya.
         if tx.Symbol == "" { tx.Symbol = "BVM" }
 
+        // 🚀 AUTO-INJECT PASPOR NEGARA:
+        // Jika transaksi baru masuk via API lokal dan ChainID-nya masih kosong (0),
+        // paksa isi menggunakan ChainID resmi dari Konstitusi Node Jenderal!
+        if tx.ChainID == 0 {
+            tx.ChainID = k.GetParamsData().GetChainID()
+        }
+
         // Opsional: Hanya buat ID jika Wallet lupa mengirimnya
+        // Pastikan kalkulasi GenerateID() di bawah ini sudah membaca ChainID yang baru disuntikkan!
         if tx.ID == "" {
             tx.ID = tx.GenerateID()
         }

@@ -1,6 +1,7 @@
 package types
 
 import (
+	"os"
 	"fmt"
 	"strconv"
         "strings"
@@ -27,15 +28,16 @@ type Params struct {
 	MaxSupply       uint64 `json:"max_supply"`       // Satuan: Atomic Unit
 
 	CurrentBaseFee uint64 `json:"current_base_fee"`
+        MinGasPrice    uint64 `json:"min_gas_price"`
 	BurnAddress    string `json:"burn_address"`
 
 	MaxValidators    int     `json:"max_validators"`
 	MinStakeAmount   uint64  `json:"min_stake_amount"`
 	UnbondingPeriod  int     `json:"unbonding_period"`
 	AutoStakePercent float64 `json:"auto_stake_percent"`
-
-
 	L2_BatchThreshold int     `json:"l2_batch_threshold"`
+
+	ChainID          uint64  `json:"chain_id"`
 }
 
 // DefaultParams: Inisialisasi dengan Rumus Matematika Murni
@@ -61,8 +63,22 @@ func DefaultParams() Params {
 	        baseDiff = 6 // Jika blok sangat cepat, persulit dari awal
 	    }
 
+        // 📡 BACA KONFIGURASI DINAMIS DARI LUAR (.env)
+        networkName := "BVM Atomic Mainnet"
+        if envName := os.Getenv("BVM_NETWORK_NAME"); envName != "" {
+                networkName = envName
+        }
+
+        chainID := uint64(1989) // 🎯 Default tetap era Sultan Jenderal Azis
+        if envChainID := os.Getenv("BVM_CHAIN_ID"); envChainID != "" {
+                // Jika ada input BVM_CHAIN_ID di .env, parsing string ke uint64
+                if val, err := strconv.ParseUint(envChainID, 10, 64); err == nil {
+                        chainID = val
+                }
+        }
+
 	return Params{
-		NetworkName:      "BVM Atomic Mainnet",
+		NetworkName:      networkName,
 		NativeSymbol:     "BVM",
 		TargetBlockTime:  blockTime,
 		AdjustmentBlock:  20,
@@ -75,15 +91,15 @@ func DefaultParams() Params {
 
 		// Fee: 0.001% dari Reward Awal (Misal 10 BVM -> 10.000 Unit)
 		CurrentBaseFee:   10000,
+                MinGasPrice:      1000,
 		BurnAddress:      "bvmf000000000000000000000000000000000000burn",
 
 		MaxValidators:    21,
 		MinStakeAmount:   1000 * BVM_UNIT,
 		UnbondingPeriod:  (14 * 24 * 3600) / blockTime,
 		AutoStakePercent: 0.20,
-
-
-		 L2_BatchThreshold: 100,
+		L2_BatchThreshold: 100,
+		ChainID:          chainID,
     }
 }
 
@@ -101,6 +117,23 @@ type NetworkResponse struct {
 
     MempoolSize        int     `json:"mempool_size"`
     NetworkName        string  `json:"network_name"`
+    ChainID            uint64  `json:"chain_id"`
+}
+
+// GetChainID: Fungsi pembantu untuk mengambil Chain ID secara dinamis dan aman dari RAM Lingkungan
+func (p Params) GetChainID() uint64 {
+    // 🚀 REVOLUSI LIVE-DETECTION: Utamakan membaca langsung dari RAM variabel lingkungan saat ini!
+    if envChainID := os.Getenv("BVM_CHAIN_ID"); envChainID != "" {
+        if val, err := strconv.ParseUint(envChainID, 10, 64); err == nil {
+            return val // Mengembalikan 9999 secara instan jika --testnet aktif!
+        }
+    }
+
+    // Jika environment kosong, kembalikan nilai default dari sasis params
+    if p.ChainID == 0 {
+        return 1989 // Default Mainnet Sultan
+    }
+    return p.ChainID
 }
 
 // GetNative: Memberikan simbol utama jaringan jika input kosong

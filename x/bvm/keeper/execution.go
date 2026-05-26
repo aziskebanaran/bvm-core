@@ -2,6 +2,8 @@ package keeper
 
 import (
     "encoding/json" // 🚩 WAJIB ADA
+    "strings"
+	"time"
     "fmt"
     "github.com/aziskebanaran/bvm-core/pkg/logger"
     "github.com/aziskebanaran/bvm-core/pkg/ai"
@@ -9,6 +11,7 @@ import (
     bankkeeper "github.com/aziskebanaran/bvm-core/x/bank/keeper"
     banktypes "github.com/aziskebanaran/bvm-core/x/bank/types" // 🚩 WAJIB ADA
     "github.com/aziskebanaran/bvm-core/x/events"
+    utxotypes "github.com/aziskebanaran/bvm-core/x/utxo/types"
 )
 
 func (k *Keeper) ExecuteBlock(block types.Block) error {
@@ -46,6 +49,59 @@ func (k *Keeper) ExecuteBlock(block types.Block) error {
 
         switch tx.Type {
 
+        case "mempool_report":
+            // 📡 JALUR OTORITAS KHUSUS: Mempool Standalone mengirim laporan status / detak jantung
+            logger.Info("CORE", fmt.Sprintf("📢 Laporan Jaringan Masuk dari Mempool Node: %s", tx.From[:12]))
+            // Contoh pembongkaran payload jika mempool mengirim data status JSON
+            var reportData map[string]interface{}
+            if err := json.Unmarshal(tx.Payload, &reportData); err == nil {
+                logger.Info("CORE", fmt.Sprintf("📊 Mempool Status -> Total Queue: %v", reportData["queue_count"]))
+            }
+
+            // Daftarkan kontribusi mempool secara otomatis ke disk metadata jika diperlukan
+            k.Store.PutToBatch(batch, "mempool_active:"+tx.From, time.Now().Unix())
+            logger.Success("CORE", fmt.Sprintf("✅ Laporan Mempool [%s] Berhasil Di-arsip!", tx.From[:8]))
+
+
+    case "utxo_move":
+        var utxoData utxotypes.UTXOData
+        if err := json.Unmarshal(tx.Payload, &utxoData); err != nil {
+            logger.Error("EXEC", "❌ Gagal bedah Payload UTXO")
+            continue
+        }
+
+        // 🛡️ Safety check tambahan sebelum pembongkaran kepingan disk dilakukan
+        if tx.ChainID > 0 && tx.ChainID != k.GetParamsData().GetChainID() {
+            logger.Error("EXEC", fmt.Sprintf("🚨 Upaya eksekusi UTXO ilegal digagalkan! Tx ChainID Mismatch: %d", tx.ChainID))
+            continue
+        }
+
+        // 1. Eksekusi UTXO (Hancurkan kepingan lama)
+        err := k.UTXO.SendAset(tx.From, tx.To, tx.Symbol, tx.Amount, tx.Fee, tx.ID, tx.Payload, batch)
+
+        if err != nil {
+            logger.Error("EXEC", fmt.Sprintf("❌ Gagal Eksekusi UTXO: %v", err))
+            continue
+        }
+
+        // 🚩 2. LOGIKA PENYAMBUNG JEMBATAN (The Bridge Back)
+        // Jika target BUKAN 0x, berarti koin masuk ke Ruang Account (bvmf)
+        if !strings.HasPrefix(tx.To, "0x") {
+            if tx.Symbol == "BVM" || tx.Symbol == k.Params.NativeSymbol {
+                // Tambahkan ke map pendingChanges agar nanti di-commit ke State Account
+                pendingChanges[tx.To] += int64(tx.Amount)
+                logger.Success("EXEC", fmt.Sprintf("🔓 %d %s Dicairkan ke Saldo Account @%s", tx.Amount, tx.Symbol, tx.To[:10]))
+            } else {
+                // Untuk Token selain BVM, gunakan Bank Keeper
+                bank := k.GetBank()
+                if b, ok := bank.(*bankkeeper.BankKeeper); ok { b.Batch = batch }
+                bank.AddBalance(tx.To, tx.Amount, tx.Symbol)
+            }
+        }
+
+        logger.Success("EXEC", fmt.Sprintf("💎 UTXO %s Berhasil Dipahat!", tx.ID[:8]))
+
+
         case "user_register":
             // 1. Bongkar Payload (JSON) untuk mengambil Username
             var data struct {
@@ -66,6 +122,89 @@ func (k *Keeper) ExecuteBlock(block types.Block) error {
 
             // 3. Catat keberhasilan di Log
             logger.Success("AUTH", fmt.Sprintf("👤 User Terdaftar: @%s -> %s", data.Username, tx.From[:10]))
+
+        case "bridge_out":
+            // 1. Ekstrak tiket tujuan
+            var bridgeData struct {
+                TargetChainID uint64 `json:"target_chain_id"`
+            }
+            if err := json.Unmarshal(tx.Payload, &bridgeData); err != nil {
+                logger.Error("BRIDGE", fmt.Sprintf("❌ Gagal membaca tiket tujuan dari %s", tx.From[:8]))
+                continue
+            }
+
+            // 2. Kunci Saldo Pengirim ke Brankas Bridge!
+            pendingChanges[tx.From] -= int64(tx.Amount)
+            pendingChanges["bvm_bridge_vault_locked"] += int64(tx.Amount)
+
+            // 3. Cetak Kuitansi (Event) agar dibaca oleh Nexus
+            logger.Success("BRIDGE", fmt.Sprintf("🔒 %d %s Dikunci! Menunggu keberangkatan ke Chain %d", tx.Amount, tx.Symbol, bridgeData.TargetChainID))
+            
+            // Opsional: Rekam log spesifik untuk Nexus
+            k.Store.PutToBatch(batch, "bridge_out_log:"+tx.ID, tx)
+
+	// 🚩 TRIGGER RELAYER LANGSUNG DARI ENGINE (The Sultan Hook)
+	events.EmitEvent("BRIDGE_OUT_READY", map[string]interface{}{
+	    "tx_id":           tx.ID,
+	    "target_chain_id": bridgeData.TargetChainID,
+	    "amount":          tx.Amount,
+	})
+
+
+case "bridge_in":
+    // 1. Verifikasi Identitas Relayer (Keamanan Utama)
+    if !k.Bridge.IsAuthorizedRelayer(tx.From) {
+        logger.Error("BRIDGE", "🚨 Relayer tidak sah!")
+        continue
+    }
+
+    // 2. Verifikasi Tanda Tangan (Wajib untuk integritas)
+    if !k.Bridge.VerifyRelayerSignature(tx.Payload, tx.Signature) {
+        logger.Error("BRIDGE", "🚨 Tanda tangan Nexus palsu!")
+        continue
+    }
+
+    // 3. Ekstrak Bukti TxID
+    var inData struct {
+        RefTxID string `json:"ref_tx_id"`
+    }
+    if err := json.Unmarshal(tx.Payload, &inData); err != nil {
+        logger.Error("BRIDGE", "❌ Format payload rusak!")
+        continue
+    }
+
+    // 4. Verifikasi Status Lock (Cek apakah proof sudah tercatat di SubmitProof)
+    if !k.Bridge.VerifySourceChainLock(inData.RefTxID) {
+        logger.Error("BRIDGE", "⚠️ Tx asal belum terkunci (Lock Proof hilang)!")
+        continue
+    }
+
+    // 5. Cek Double-Spend (Idempotency)
+    var isClaimed string
+    errClaim := k.Store.Get("bridge_claimed:"+inData.RefTxID, &isClaimed)
+    if errClaim == nil && isClaimed == "true" {
+        logger.Error("BRIDGE", "⚠️ Transaksi sudah pernah diklaim!")
+        continue
+    }
+
+    // 6. Eksekusi Saldo (Update state melalui pendingChanges)
+    pendingChanges[tx.To] += int64(tx.Amount)
+    k.Store.PutToBatch(batch, "bridge_claimed:"+inData.RefTxID, []byte("true"))
+
+    logger.Success("BRIDGE", fmt.Sprintf("🌉 KEDATANGAN SUKSES! %d BVM ke %s", tx.Amount, tx.To[:8]))
+
+
+
+case "submit_proof":
+    // Hanya relayer yang boleh mengirim bukti kunci
+    if !k.Bridge.IsAuthorizedRelayer(tx.From) { continue }
+
+    // Simpan bukti ke KVStore agar nanti bisa dicek oleh bridge_in
+    var proofData struct { RefTxID string }
+    json.Unmarshal(tx.Payload, &proofData)
+    k.Bridge.RecordLockProof(proofData.RefTxID)
+
+    logger.Success("BRIDGE", "✅ Bukti kunci diterima: " + proofData.RefTxID[:8])
 
 
 		case "contract_call":
@@ -165,40 +304,61 @@ func (k *Keeper) ExecuteBlock(block types.Block) error {
 	    logger.Success("STAKING", fmt.Sprintf("🔓 %s menarik stake sebesar %d", tx.From[:8], tx.Amount))
 
 
-        default: // Transfer Standar
-            if tx.Symbol == "BVM" || tx.Symbol == k.Params.NativeSymbol {
-                pendingChanges[tx.From] -= int64(tx.Amount)
-                pendingChanges[tx.To] += int64(tx.Amount)
-            } else {
-		    bank := k.GetBank()
+default: // Transfer Standar
+    if tx.Symbol == "BVM" || tx.Symbol == k.Params.NativeSymbol {
+        pendingChanges[tx.From] -= int64(tx.Amount) 
 
-		    if b, ok := bank.(*bankkeeper.BankKeeper); ok {
-		        b.Batch = batch
-		    }
-
-		    bank.SubBalance(tx.From, tx.Amount, tx.Symbol)
-		    bank.AddBalance(tx.To, tx.Amount, tx.Symbol)
-		}
-
+        if strings.HasPrefix(tx.To, "0x") {
+            // 📥 MASUK KE RUANG UTXO (0x)
+            // Jika dikirim via API lokal dan ChainID tx kosong, kita otomatis wariskan ChainID node
+            if tx.ChainID == 0 {
+                tx.ChainID = k.GetParamsData().GetChainID()
+            }
+            k.UTXO.MintUTXO(tx.To, tx.To, "AUTO_USER", tx.Symbol, tx.Amount, tx.ID, batch)
+            logger.Success("EXEC", fmt.Sprintf("📥 %d %s Berhasil Masuk Brankas UTXO 0x (ChainID: %d)", tx.Amount, tx.Symbol, tx.ChainID))
+        } else {
+            pendingChanges[tx.To] += int64(tx.Amount)
         }
 
-        // 🚩 B. PEMBAGIAN FEE (Standardisasi Sultan)
-        tip, burn := k.Params.DistributeFee(tx.Fee)
+    } else {
+        // Logika untuk Token Factory tetap menggunakan Bank Keeper
+        bank := k.GetBank()
+        if b, ok := bank.(*bankkeeper.BankKeeper); ok { b.Batch = batch }
+
+        bank.SubBalance(tx.From, tx.Amount, tx.Symbol)
+
+        if strings.HasPrefix(tx.To, "0x") {
+            // Token juga bisa dipindahkan ke ruang UTXO 0x!
+            k.UTXO.MintUTXO(tx.To, tx.To, "AUTO_USER", tx.Symbol, tx.Amount, tx.ID, batch)
+        } else {
+            bank.AddBalance(tx.To, tx.Amount, tx.Symbol)
+        }
+    }
+}
+
+        // =========================================================================
+        // 🚩 B. PEMBAGIAN FEE DENGAN DELEGASI KE REWARD KEEPER
+        // =========================================================================
+        actualFee := tx.Fee
+
+        // Panggil fungsi pemotong jatah Mempool dari reward.go
+        relayerCut := k.DistributeRelayerReward(tx.Relayer, tx.ID, tx.Fee, uint64(block.Index), pendingChanges, batch)
+        actualFee -= relayerCut
+
+        // Lanjutkan pembagian sisa fee untuk Miner tip & burn
+        tip, burn := k.Params.DistributeFee(actualFee)
 
         if tx.Symbol == "BVM" || tx.Symbol == "" {
             pendingChanges[block.Miner] += int64(tip)
-            k.TotalSupplyBVM -= burn 
+            k.TotalSupplyBVM -= burn
         } else {
-		    bank := k.GetBank()
+            bank := k.GetBank()
+            if b, ok := bank.(*bankkeeper.BankKeeper); ok { b.Batch = batch }
 
-		    // 🚩 PERBAIKAN: Type Assertion lagi
-		    if b, ok := bank.(*bankkeeper.BankKeeper); ok {
-		        b.Batch = batch
-		    }
+            if tip > 0 { bank.AddBalance(block.Miner, tip, tx.Symbol) }
+            if burn > 0 { bank.Burn(k.Params.BurnAddress, burn, tx.Symbol) }
+        }
 
-		    if tip > 0 { bank.AddBalance(block.Miner, tip, tx.Symbol) }
-		    if burn > 0 { bank.Burn(k.Params.BurnAddress, burn, tx.Symbol) }
-		}
 
         // C. Update Nonce
         if tx.Nonce >= pendingNonces[tx.From] {
@@ -206,34 +366,14 @@ func (k *Keeper) ExecuteBlock(block types.Block) error {
         }
     }
 
-    // --- 2. DISTRIBUSI REWARD BLOK (BVM) ---
-    // A. Ambil data hadiah (Sudah termasuk subsidi per kepala + tip fee)
+    // --- 2. DISTRIBUSI REWARD BLOK (BVM) REVOLUSI ADALAH NYATA ---
     k.PromoteMinerToValidator(block.Miner, batch)
 
-    minerReward, _, _ := k.DistributeBlockReward(int64(block.Index), totalFees, batch) // ✅ Fixed!
+    // 🎯 KODE BARU AMAN (Suntikkan block.Miner secara presisi):
+    _, _, errBlock := k.DistributeBlockReward(int64(block.Index), block.Miner, totalFees, batch, pendingChanges)
 
-    // B. Ambil angka share subsidi murni (Untuk validator selain miner)
-    vCount := k.GetValidatorCount()
-    share := k.GetSubsidiAtHeight(int64(block.Index), vCount)
-
-    // C. Bagikan ke semua validator aktif
-    if k.Staking != nil {
-        validators := k.Staking.GetValidators()
-        for _, v := range validators {
-            if v.IsActive {
-                if v.Address == block.Miner {
-                    // Miner dapat jatah (subsidi + tip fee)
-                    pendingChanges[v.Address] += int64(minerReward)
-                } else {
-                    // Validator lain dapat jatah bagi rata (subsidi saja)
-                    pendingChanges[v.Address] += int64(share)
-                }
-
-                // Sinkronisasi status ke Staking Engine agar API /api/validators terisi
-                // Kita abaikan error (_) karena ini hanya sinkronisasi status (absen)
-                _ = k.Staking.AutoDelegate(v.Address, 0)
-            }
-        }
+    if errBlock != nil {
+        logger.Error("EXEC", fmt.Sprintf("❌ Gagal distribusi block reward: %v", errBlock))
     }
 
 

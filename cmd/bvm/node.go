@@ -4,6 +4,7 @@ import (
 	"encoding/json" // 🚩 Tambahkan ini
 	"os"            // 🚩 Tambahkan ini
 	"fmt"
+
 	"github.com/aziskebanaran/bvm-core/pkg/logger"
 	"github.com/aziskebanaran/bvm-core/pkg/node"
 	"github.com/aziskebanaran/bvm-core/pkg/storage"
@@ -11,8 +12,8 @@ import (
 	"github.com/aziskebanaran/bvm-core/x/bvm/types"
 	"github.com/aziskebanaran/bvm-core/x/miner" // 🚩 Impor package miner Sultan
 	"github.com/spf13/cobra"
-	"time"
 	"github.com/aziskebanaran/bvm-core/pkg/client"
+	"time"
 )
 
 // getMinerAddress: Mengambil identitas miner secara dinamis dari file wallet
@@ -44,83 +45,126 @@ func getMinerAddress(homeDir string) (string, error) {
 }
 
 func startNodeProvider(cmd *cobra.Command, args []string) {
-	// 1. Ambil Flag Strategis
-	h, _ := cmd.Flags().GetString("home")
-	nexusURL, _ := cmd.Flags().GetString("nexus")
-	useMiner, _ := cmd.Flags().GetBool("miner")
+    h, _ := cmd.Flags().GetString("home")
+    useMiner, _ := cmd.Flags().GetBool("miner")
+    isTestnet, _ := cmd.Flags().GetBool("testnet")
+    
+    // 🚩 1. PENETAPAN NEXUS URL DINAMIS (Satu-satunya sumber kebenaran)
+    nexusURL := "http://localhost:9092" // Default Mainnet
+    if isTestnet {
+        nexusURL = "http://localhost:9094" // Port Testnet
+    }
+    // Override manual jika flag -n diset
+    if cmd.Flags().Changed("nexus") {
+        nexusURL, _ = cmd.Flags().GetString("nexus")
+    }
 
-	logger.Info("SYSTEM", fmt.Sprintf("🏗️  Inisialisasi BVM di %s...", h))
+    // 🚩 2. KONSOLIDASI LINGKUNGAN (Environment Injection)
+    if isTestnet {
+        os.Setenv("BVM_CHAIN_ID", "9999")
+        os.Setenv("BVM_NETWORK_NAME", "BVM Atomic Testnet")
+        logger.Info("SYSTEM", "🧪 SWITCHING TO TESTNET ENVIRONMENT (ChainID: 9999)")
+    } else {
+        os.Setenv("BVM_CHAIN_ID", "1989")
+        os.Setenv("BVM_NETWORK_NAME", "BVM Mainnet")
+        logger.Info("SYSTEM", "🌐 RUNNING ON MAINNET ENVIRONMENT (ChainID: 1989)")
+    }
 
-	// 2. DATABASE & STATE (Mengikuti Jalur Home)
-	dbPath := fmt.Sprintf("%s/blockchain_db", h)
-	store, err := storage.NewLevelDBStore(dbPath, 8)
-	if err != nil {
-		logger.Error("SYSTEM", "🚨 Gagal membuka database: ", err)
-		panic(err)
-	}
+    logger.Info("SYSTEM", fmt.Sprintf("🏗️  Inisialisasi BVM Node di %s...", h))
 
-	// 3. JEMBATAN UDARA (Sinkronisasi Nexus via Flag)
-	StartNodeWithSync(nexusURL, store)
+    // 3. DATABASE: Gunakan path yang sudah terisolasi (via main.go)
+        // 1. BUAT SATU INSTANS DATABASE UTAMA
+        dbPath := fmt.Sprintf("%s/blockchain_db", h)
+        os.MkdirAll(dbPath, 0755)
+        store, err := storage.NewLevelDBStore(dbPath, 8)
+        if err != nil {
+                logger.Error("SYSTEM", "🚨 Gagal membuka database: ", err)
+                panic(err)
+        }
 
-	// 4. SETUP APP & KERNEL
-	bc := types.NewBlockchain()
-	bvmApp := app.NewApp(store, bc)
-	bvmApp.Start()
+        // 🚩 2. SINKRONISASI SATU KALI JALAN (BOOTSTRAP)
+        // Proses ini memblokir startup sampai sinkronisasi selesai, lalu BERHENTI.
+        StartNodeWithSync(nexusURL, store)
 
-	// 5. MINER INTERNAL (Membaca Wallet dari Home)
-	if useMiner {
-		go func() {
-			time.Sleep(5 * time.Second)
-			logger.Success("MINER", "🏗️  Membangunkan Miner Internal Sultan...")
+        // 3. SETUP APP & KERNEL
+        bc := types.NewBlockchain()
+        bvmApp := app.NewApp(store, bc)
+        // 🚩 TAMBAHKAN INI SEBAGAI BACKGROUND MONITOR
+        go RunSyncEngine(nexusURL, store)
+        bvmApp.Start()
 
-			minerAddr, err := getMinerAddress(h)
-			if err != nil {
-				logger.Error("MINER", "🚨 KRITIKAL: Miner gagal aktif karena: ", err)
-				logger.Error("MINER", fmt.Sprintf("Silakan pastikan node_wallet.json tersedia di %s", h))
-				return
-			}
 
-			logger.Info("MINER", "👷 Alamat Miner Aktif: "+minerAddr)
+        // 4. 👷 MOBILISASI MINER INTERNAL (ANTI-BENTROK DB / MURNI INTER-MEMORY)
+        if useMiner {
+                go func() {
+                        // Beri jeda 5 detik agar pangkalan node P2P & HTTP siap sepenuhnya
+                        time.Sleep(5 * time.Second)
+                        logger.Success("MINER", "🏗️  Membangunkan Miner Internal Sultan...")
 
-			engine := miner.NewMinerEngine(bvmApp.BVMKeeper)
-			engine.Start(minerAddr)
-		}()
-	}
+                        minerAddr, err := getMinerAddress(h)
+                        if err != nil {
+                                logger.Error("MINER", "🚨 KRITIKAL: Miner gagal aktif karena: ", err)
+                                logger.Error("MINER", fmt.Sprintf("Silakan pastikan node_wallet.json tersedia di %s", h))
+                                return
+                        }
 
-	// 6. JALANKAN FULL NODE
-	node.StartFullNode(
-		bvmApp.BVMKeeper,
-		bvmApp.Mempool,
-		bvmApp.P2P,
-		store,
-		"BVM-Primary-Node-01",
-	)
+                        logger.Info("MINER", "👷 Alamat Miner Aktif: "+minerAddr)
+
+                        // =========================================================================
+                        // 🔒 KAITAN PENGUNCI GOROUTINE: Paksa thread Miner tunduk pada Jaringan aktif!
+                        // =========================================================================
+                        if isTestnet {
+                                os.Setenv("BVM_CHAIN_ID", "9999")
+                        } else {
+                                os.Setenv("BVM_CHAIN_ID", "1989")
+                        }
+                        // =========================================================================
+
+                        // Jalankan mesin engine penambang murni menggunakan Keeper lokal yang sama!
+                        engine := miner.NewMinerEngine(bvmApp.BVMKeeper)
+                        engine.Start(minerAddr)
+                }()
+        }
+
+
+    // 7. START NODE (DENGAN PORT DINAMIS)
+    apiPort := 8080
+    p2pPort := 9090
+    nodeName := "BVM-Mainnet-Node-01"
+    
+    if isTestnet {
+        apiPort = 8081
+        p2pPort = 9091
+        nodeName = "BVM-Testnet-Node-01"
+    }
+
+    node.StartFullNode(bvmApp.BVMKeeper, bvmApp.Mempool, bvmApp.P2P, store, nodeName, apiPort, p2pPort)
 }
 
 func StartNodeWithSync(nexusAddr string, store storage.BVMStore) {
-    // 1. Ambil tinggi lokal (Sultan lupa kirim 'store')
-    localHeight := getLocalHeight(store)
-
-    // 2. Tanya ke Nexus (Fungsi ini return 2 nilai: hasil & error)
-    nexusInfo, err := fetchInfoFromNexus(nexusAddr)
+    clientNexus := client.NewBVMClient(nexusAddr)
+    
+    // Tanya Nexus tinggi blok terakhir
+    nexusInfo, err := clientNexus.GetNetworkInfo()
     if err != nil {
-        fmt.Printf("⚠️ Gagal kontak Nexus: %v. Melanjutkan mode offline...\n", err)
+        fmt.Printf("⚠️ Nexus Offline di %s: %v. Mode Offline...\n", nexusAddr, err)
         return
     }
 
-    // 3. Bandingkan (Pastikan konversi tipe data uint64 cocok)
-    if uint64(nexusInfo.Height) > localHeight {
-        target := uint64(nexusInfo.Height)
-        fmt.Printf("🔄 [BOOTSTRAP] Perangkat tertinggal. Menarik %d blok dari Nexus...\n",
-            target - localHeight)
+    localHeight := getLocalHeight(store)
 
-        // 4. Jalankan FastSync (Sultan lupa kirim 'target' dan 'store')
-        err := performFastSync(nexusAddr, localHeight, target, store)
+    // Jika tertinggal, blokir proses start sampai sinkron selesai (Bootstrap)
+    if uint64(nexusInfo.Height) > localHeight {
+        fmt.Printf("🔄 [BOOTSTRAP] Memulai sinkronisasi awal dari #%d ke #%d...\n", localHeight, nexusInfo.Height)
+        err := clientNexus.FastSync(localHeight, uint64(nexusInfo.Height), store)
         if err != nil {
-            fmt.Printf("❌ FastSync Gagal: %v\n", err)
+            fmt.Printf("❌ Bootstrap Gagal: %v\n", err)
+        } else {
+            fmt.Println("✅ [BOOTSTRAP] Sinkronisasi Awal Selesai!")
         }
     }
 }
+
 
 // 1. Fungsi untuk cek tinggi blok lokal di database Core
 func getLocalHeight(store storage.BVMStore) uint64 {

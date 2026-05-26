@@ -1,6 +1,7 @@
 package client
 
 import (
+	"strings"
 	"bytes"
 	"io"
 	"mime/multipart"
@@ -168,34 +169,90 @@ func (c *BVMClient) GetBlockByHeight(height uint64) (*types.Block, error) {
 }
 
 func (c *BVMClient) FastSync(start uint64, target uint64, store storage.BVMStore) error {
-    fmt.Printf("⚡ [FASTSYNC] Memulai akselerasi dari #%d ke #%d...\n", start, target)
-    
-    // Kita tarik dalam kelompok per 100 blok agar tidak membebani RAM
-    const batchSize = 100 
-    
+    const batchSize = 100
     for current := start + 1; current <= target; {
-        end := current + batchSize
-        if end > target {
-            end = target
+        end := current + batchSize - 1
+        if end > target { end = target }
+
+        // MENGAMBIL 100 BLOK DALAM 1 REQUEST
+        blocks, err := c.GetBlockRange(current, end)
+        if err != nil {
+            fmt.Printf("⚠️ Batch %d-%d gagal, retrying...\n", current, end)
+            time.Sleep(2 * time.Second)
+            continue
         }
 
-        fmt.Printf("📥 Menarik batch blok #%d sampai #%d...\n", current, end)
-        
-        // Panggil endpoint Nexus yang sudah kita buat
-        for h := current; h <= end; h++ {
-            block, err := c.GetBlockByHeight(h)
-            if err != nil {
-                return fmt.Errorf("Gagal di blok %d: %v", h, err)
-            }
-            
-            // Simpan ke database lokal perangkat baru
-            store.SaveBlock(*block)
-            store.Put("m:height", h)
-        }
-        
+	for _, b := range blocks {
+	    // 🚩 TAMBAHAN: Validasi kesehatan blok sebelum masuk ke Store
+	    if b.Index == 0 && b.Hash == "" {
+	        fmt.Println("⚠️ Mendeteksi blok sampah, skip...")
+	        continue
+	    }
+
+	    store.SaveBlock(b)
+	    height := uint64(b.Index)
+	    store.Put("m:height", height)
+	}
+
         current = end + 1
     }
-    
-    fmt.Println("✅ [FASTSYNC] Sinkronisasi Selesai! Perangkat sudah mutakhir.")
     return nil
+}
+
+
+func (c *BVMClient) SetVaults(vaultList string, token string, signature string) error {
+    vaults := strings.Split(vaultList, ",")
+
+    reqBody, _ := json.Marshal(map[string][]string{
+        "vault_addresses": vaults,
+    })
+
+    req, err := http.NewRequest("POST", c.BaseURL+"/api/admin/vaults", bytes.NewBuffer(reqBody))
+    if err != nil {
+        return err
+    }
+
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+token)
+    
+    // 🛡️ BENTENG TAMBAHAN: Signature membuktikan Anda adalah Pemilik Wallet
+    req.Header.Set("X-Admin-Signature", signature)
+
+    resp, err := c.HTTP.Do(req)
+    if err != nil {
+        return fmt.Errorf("🌐 Gagal kirim perintah ke Core: %v", err)
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        body, _ := io.ReadAll(resp.Body)
+        return fmt.Errorf("🚨 Core Menolak: %s", string(body))
+    }
+
+    return nil
+}
+
+func (c *BVMClient) GetBlockRange(start, end uint64) ([]types.Block, error) {
+    url := fmt.Sprintf("%s/api/blocks/%d/%d", c.BaseURL, start, end)
+    resp, err := c.HTTP.Get(url)
+    if err != nil { return nil, err }
+    defer resp.Body.Close()
+
+    var blocks []types.Block
+    if err := json.NewDecoder(resp.Body).Decode(&blocks); err != nil {
+        return nil, err
+    }
+    return blocks, nil
+}
+
+func (c *BVMClient) GetNexusAnchor() (string, error) {
+    resp, err := c.HTTP.Get(c.BaseURL + "/api/anchor/latest")
+    if err != nil { return "", err }
+    defer resp.Body.Close()
+
+    var result struct {
+        LastAnchor string `json:"last_anchor"`
+    }
+    json.NewDecoder(resp.Body).Decode(&result)
+    return result.LastAnchor, nil
 }

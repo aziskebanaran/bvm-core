@@ -1,17 +1,17 @@
 package types
 
-// Account: Identitas tunggal penghuni BVM
+
 type Account struct {
-    Address  string  `json:"address"`
-    Username string  `json:"username"`
-
-    Balances map[string]uint64 `json:"balances"`
-
-    Nonce    uint64  `json:"nonce"`
-    // Tambahkan ini untuk keamanan & identitas
-    IsContract bool   `json:"is_contract"` // Pembeda user biasa vs Smart Contract
-    Status     string `json:"status"`      // "active", "frozen", "migrated"
+    Address       string            `json:"address"`
+    Username      string            `json:"username"`
+    EthAddress    string            `json:"eth_address,omitempty"` // 🚩 Tambahkan untuk mapping 0x
+    Balances      map[string]uint64 `json:"balances"`
+    Nonce         uint64            `json:"nonce"`
+    IsContract    bool              `json:"is_contract"`
+    Status        string            `json:"status"`       // "active", "frozen"
+    LastActivity  int64             `json:"last_activity"` // Untuk statistik wallet
 }
+
 
 type Block struct {
     // --- KELOMPOK 1: FIXED-SIZE (ANGKA) ---
@@ -57,16 +57,6 @@ type NodeStatus struct {
 
     InFlight         int64   `json:"in_flight"`
 }
-
-type WalletState struct {
-    Address        string `json:"address"`
-    BalanceAtomic  uint64 `json:"balance_atomic"`  // Untuk perhitungan mesin (Satoshis)
-    BalanceDisplay string `json:"balance_display"` // Untuk mata Sultan (Contoh: "10.00000000")
-    Nonce          uint64 `json:"nonce"`           // Nomor urut transaksi berikutnya
-    Symbol         string `json:"symbol"`          // Selalu "BVM" untuk Core
-    Status         string `json:"status,omitempty"` // Status akun: "active", "frozen"
-}
-
 
 // WASMContract: Blueprint untuk aplikasi yang berjalan di atas BVM
 type WASMContract struct {

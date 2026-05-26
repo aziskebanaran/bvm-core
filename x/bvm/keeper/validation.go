@@ -62,11 +62,11 @@ func (k *Keeper) ValidateConsensus(newBlock types.Block) error {
 	return nil
 }
 
+
 func (k *Keeper) ValidateBlockTransactions(block types.Block) error {
     isNewCycle := (block.Index % 10 == 1)
 
     if isNewCycle && block.Index > 1 {
-        // Hanya verifikasi apakah anchor-nya ada, tidak perlu menulis lagi.
         var anchor string
         k.Store.Get(k.keyMeta("cycle_anchor"), &anchor)
 
@@ -75,19 +75,34 @@ func (k *Keeper) ValidateBlockTransactions(block types.Block) error {
         }
     }
 
-    // Cek integritas transaksi dasar
     for _, tx := range block.Transactions {
         if tx.ID == "" || tx.From == "" {
             return fmt.Errorf("❌ Struktur transaksi rusak")
+        }
+
+        // 🚀 BENTENG PERTAHANAN SULTAN: Cegah Replay Attack Lintas Jaringan!
+        // Ambil Chain ID resmi dari Params Konstitusi Node Jenderal
+        nodeChainID := k.GetParamsData().GetChainID()
+        // Jika transaksi memiliki ChainID (> 0) tetapi tidak cocok dengan nomor identitas node, TEMBAK JATUH!
+        if tx.ChainID > 0 && tx.ChainID != nodeChainID {
+            return fmt.Errorf("🚨 ILLEGAL REPLAY ATTACK: Transaksi %s berasal dari jaringan luar (Tx ChainID: %d, Node ChainID: %d)", 
+                tx.ID[:8], tx.ChainID, nodeChainID)
         }
     }
     return nil
 }
 
 func (k *Keeper) VerifyBlock(newBlock types.Block) bool {
-    // 1. Cek Fisik: Hash blok harus sesuai dengan isinya
+    // 🚩 PERLINDUNGAN EKSTREM:
+    // Jika Index 0 dan Hash kosong, ini adalah blok "kosong" hasil gagal decode.
+    if newBlock.Index == 0 && newBlock.Hash == "" {
+        logger.Error("VALIDATOR", "❌ Blok KOSONG terdeteksi, cegah Panic!")
+        return false 
+    }
+
+    // 1. Cek Fisik: Hash blok harus sesuai
     if newBlock.Hash != newBlock.CalculateBlockHash() {
-        logger.Error("VALIDATOR", "❌ Hash blok tidak valid (Calculated != Provided)")
+        logger.Error("VALIDATOR", "❌ Hash blok tidak valid")
         return false
     }
 

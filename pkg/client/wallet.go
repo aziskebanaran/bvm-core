@@ -3,10 +3,11 @@ package client
 import (
 	"bytes"
 	 "encoding/json"
-	"github.com/aziskebanaran/bvm-core/pkg/types"
+	"github.com/aziskebanaran/bvm-core/x/bvm/types"
 	"fmt"
 	"net/http"
 	"os"
+	"io"
 )
 
 // GetBalance: Mengambil saldo koin spesifik (Multi-Token)
@@ -135,6 +136,67 @@ func (c *BVMClient) BroadcastTX(tx types.Transaction) (string, error) {
     return result.TxID, nil
 }
 
+// BroadcastBridgeOut: Fungsi Spesial untuk Menyeberangkan Aset
+func (c *BVMClient) BroadcastBridgeOut(tx types.Transaction) (string, error) {
+    // 1. Validasi Keamanan: Pastikan tipenya benar
+    if tx.Type != "bridge_out" {
+        return "", fmt.Errorf("❌ Sistem Menolak: Payload bukan tipe Bridge Out")
+    }
+
+    // 2. Bungkus Transaksi
+    payload, _ := json.Marshal(tx)
+    
+    // 3. Tembak ke API Khusus Bridge yang baru Jenderal buat!
+    url := fmt.Sprintf("%s/api/bridge/out", c.BaseURL)
+    
+    req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+    if err != nil {
+        return "", fmt.Errorf("❌ Gagal merakit roket: %v", err)
+    }
+    
+    req.Header.Set("Content-Type", "application/json")
+    if c.Token != "" {
+        req.Header.Set("Authorization", "Bearer "+c.Token)
+    }
+
+    // 4. Eksekusi
+    resp, err := c.HTTP.Do(req)
+    if err != nil {
+        return "", fmt.Errorf("🛰️ Jalur Portal Terputus: %v", err)
+    }
+    defer resp.Body.Close()
+
+    // 5. Analisis Respon
+    if resp.StatusCode != http.StatusOK {
+        // Baca semua balasan dari Node mentah-mentah
+        bodyBytes, _ := io.ReadAll(resp.Body)
+        
+        var errorResp struct {
+            Message string `json:"message"`
+        }
+        
+        // Jika formatnya JSON, tampilkan pesannya
+        if err := json.Unmarshal(bodyBytes, &errorResp); err == nil && errorResp.Message != "" {
+            return "", fmt.Errorf("%s", errorResp.Message)
+        }
+        
+        // Jika BUKAN JSON (misal Core crash), tampilkan teks mentahnya!
+        return "", fmt.Errorf("RAW ERROR DARI NODE: %s", string(bodyBytes))
+    }
+
+    // 6. Tangkap TXID
+    var result struct {
+        TxID string `json:"tx_id"`
+    }
+    json.NewDecoder(resp.Body).Decode(&result)
+    
+    if result.TxID == "" {
+        return "", fmt.Errorf("Transaksi berhasil, tapi TXID hilang dalam dimensi")
+    }
+
+    return result.TxID, nil
+}
+
 
 func (c *BVMClient) GetHistory(address string) ([]types.Transaction, error) {
 	resp, err := c.HTTP.Get(fmt.Sprintf("%s/api/history?address=%s", c.BaseURL, address))
@@ -187,3 +249,4 @@ func (c *BVMClient) Login(username, sig, msg string) (string, error) {
     
     return "", fmt.Errorf("gagal login: status tidak dikenal")
 } // 🔍 Pastikan hanya ada satu kurung kurawal tutup di sini!
+

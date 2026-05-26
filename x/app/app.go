@@ -21,6 +21,8 @@ import (
 	wasmkeeper "github.com/aziskebanaran/bvm-core/x/wasm/keeper"
         storagekeeper "github.com/aziskebanaran/bvm-core/x/storage/keeper"
 	factorykeeper "github.com/aziskebanaran/bvm-core/x/factory/keeper"
+	utxokeeper "github.com/aziskebanaran/bvm-core/x/utxo/keeper"
+        bridgekeeper "github.com/aziskebanaran/bvm-core/x/bridge/keeper"
 )
 
 type BaseApp struct {
@@ -29,9 +31,9 @@ type BaseApp struct {
 	BVMKeeper  x.BVMKeeper      // 🚩 Gunakan interface x.BVMKeeper
 	BankKeeper x.BankKeeper     // 🚩 Gunakan interface x.BankKeeper
 	AuthKeeper x.AuthKeeper     // 🚩 Gunakan interface x.AuthKeeper
+	UTXOKeeper x.UTXOKeeper
 	WasmKeeper x.WasmKeeper
 	Staking    x.StakingKeeper
-
 	Mempool    x.MempoolKeeper
 	Miner      x.MinerEngine
 	Store      storage.BVMStore
@@ -65,7 +67,11 @@ func NewApp(store storage.BVMStore, bc *types.Blockchain) *BaseApp {
 
 	factoryK := factorykeeper.NewFactoryKeeper(store, bankK)
 
-        // 🚩 SEKARANG HANYA 9 ARGUMEN (Tanpa store.GetDB())
+	utxoK := utxokeeper.NewKeeper(store, authK)
+
+	bridgeK := bridgekeeper.NewKeeper(store)
+
+       // 🚩 SEKARANG HANYA 9 ARGUMEN (Tanpa store.GetDB())
         bvmK := bvmkeeper.NewKeeper(
                 store,         // 1. BVMStore
                 bc,            // 2. Blockchain
@@ -79,6 +85,8 @@ func NewApp(store storage.BVMStore, bc *types.Blockchain) *BaseApp {
                 p2pK,          // 9. P2P
 		storageK,      // 11 🚩
 		factoryK,
+		utxoK,
+		bridgeK,
         )
 
         minerE := miner.NewMinerEngine(bvmK)
@@ -87,6 +95,7 @@ func NewApp(store storage.BVMStore, bc *types.Blockchain) *BaseApp {
                 BVMKeeper:  bvmK,
                 BankKeeper: bankK,
                 AuthKeeper: authK,
+		UTXOKeeper: utxoK,
                 Mempool:    mp,
                 WasmKeeper: wasmK,
                 Staking:    stakingK,

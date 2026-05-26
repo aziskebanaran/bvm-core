@@ -152,3 +152,31 @@ func getUserID(r *http.Request) string {
     // 3. Jika keduanya kosong, berarti user belum terverifikasi
     return ""
 }
+
+// HandleSetVaultList: Hanya bisa diakses oleh Admin/Owner untuk mendaftarkan alamat Vault
+func HandleSetVaultList(sk *keeper.StorageKeeper) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        // 1. Ambil data dari body
+        var req struct {
+            VaultAddresses []string `json:"vault_addresses"`
+        }
+
+        if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+            http.Error(w, "Format JSON Salah", http.StatusBadRequest)
+            return
+        }
+
+        // 2. Simpan ke Storage (Gunakan fungsi baru yang kita buat tadi)
+        err := sk.SetVaultList(req.VaultAddresses)
+        if err != nil {
+            http.Error(w, fmt.Sprintf("Gagal menyimpan daftar vault: %v", err), http.StatusInternalServerError)
+            return
+        }
+
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "status":  "success",
+            "message": fmt.Sprintf("Daftar %d vault telah diperbarui!", len(req.VaultAddresses)),
+        })
+    }
+}

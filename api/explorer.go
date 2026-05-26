@@ -68,17 +68,85 @@ func HandleAddressHistory(store storage.BVMStore) http.HandlerFunc {
 	}
 }
 
-// HandleHolders: Menampilkan daftar semua pemilik saldo (Rich List)
+// HandleHolders: Menampilkan daftar semua pemilik saldo (Rich List) - Penyatuan Sempurna Dua Dunia
 func HandleHolders(k x.BVMKeeper) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 🚩 PERBAIKAN: Panggil menteri Bank melalui Jenderal
-		holders := k.GetBank().GetAllBalances()
+		// 1. Tarik database dasar dari wilayah Account-Based (Menteri Bank)
+		accountHolders := k.GetBank().GetAllBalances()
+
+		// 2. Buat map baru untuk menyusun hasil laporan gabungan akhir
+		hybridHolders := make(map[string]map[string]uint64)
+
+		// 3. Deteksi simbol native dinamis tanpa hardcode
+		nativeSymbol := "BVM"
+		if k.GetParams() != nil {
+			nativeSymbol = k.GetParams().GetParamsData().NativeSymbol
+		}
+
+		// 4. Salin data account dasar terlebih dahulu ke map gabungan
+		for addr, assets := range accountHolders {
+			hybridHolders[addr] = make(map[string]uint64)
+			for sym, bal := range assets {
+				hybridHolders[addr][sym] = bal
+			}
+		}
+
+		// 5. 🚀 RADAR KEPINGAN UTXO: Panggil menteri UTXO untuk menarik data kepingan valid
+		utxoKeeper := k.GetUTXO()
+		if utxoKeeper != nil {
+			utxoHoldersMap := utxoKeeper.GetAllUTXOHolders(nativeSymbol)
+
+			// Masukkan atau timpa saldo alamat 0x dengan data kepingan UTXO hakiki dari disk LevelDB
+			for utxoAddr, utxoBal := range utxoHoldersMap {
+				if _, exists := hybridHolders[utxoAddr]; !exists {
+					hybridHolders[utxoAddr] = make(map[string]uint64)
+				}
+				// Jalur Eksekusi Mutlak: Paksa timpa saldo BVM alamat 0x dengan realitas UTXO!
+				hybridHolders[utxoAddr][nativeSymbol] = utxoBal
+			}
+		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(holders)
+		json.NewEncoder(w).Encode(hybridHolders)
 	}
 }
 
+// HandleUTXOHolders: Memanggil menteri UTXO untuk menarik Rich List kepingan murni berbasis Params Dinamis Konstitusi L1
+func HandleUTXOHolders(k x.BVMKeeper) http.HandlerFunc {
+        return func(w http.ResponseWriter, r *http.Request) {
+                utxoKeeper := k.GetUTXO()
+                if utxoKeeper == nil {
+                        http.Error(w, "🚨 Modul UTXO tidak merespon (NIL)", http.StatusInternalServerError)
+                        return
+                }
+
+                // 🚩 PENARIKAN SIMBOL DINAMIS TOTAL TANPA HARDCODE:
+                nativeSymbol := "BVM" // Fallback guard
+                if k.GetParams() != nil {
+                        nativeSymbol = k.GetParams().GetParamsData().NativeSymbol
+                }
+
+                // Delegasikan perintah ke menteri UTXO dengan menyuntikkan nama simbol hasil deteksi otomatis
+                utxoHoldersMap := utxoKeeper.GetAllUTXOHolders(nativeSymbol)
+
+                // 🚀 KALIBRASI SULTAN ENGINE: Karena utxoHoldersMap adalah map[string]uint64 murni,
+                // kita bisa langsung menjumlahkannya secara instan tanpa Type Assertion!
+                var totalSupplyUTXO uint64 = 0
+                for _, balance := range utxoHoldersMap {
+                        totalSupplyUTXO += balance
+                }
+
+                w.Header().Set("Content-Type", "application/json")
+                json.NewEncoder(w).Encode(map[string]interface{}{
+                        "status":            "SUCCESS",
+                        "network":           "BVM-Mainnet-UTXO",
+                        "native_token":      nativeSymbol,
+                        "total_holders":     len(utxoHoldersMap),
+                        "total_supply_utxo": totalSupplyUTXO, // 🚩 AMUNISI INDIKATOR BARU SULTAN
+                        "holders":           utxoHoldersMap,
+                })
+        }
+}
 
 func HandleGetBlockByHeight(k x.BVMKeeper) http.HandlerFunc {
 	    return func(w http.ResponseWriter, r *http.Request) {

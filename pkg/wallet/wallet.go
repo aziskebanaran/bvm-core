@@ -3,7 +3,7 @@ package wallet
 import (
 	"github.com/aziskebanaran/bvm-core/pkg/client" // Kabel Sakti Sultan
 	"github.com/aziskebanaran/bvm-core/pkg/logger" // Logger Berwarna
-	"github.com/aziskebanaran/bvm-core/pkg/types"
+	"github.com/aziskebanaran/bvm-core/x/bvm/types"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"strings"
  	"encoding/json" // Hanya untuk simpan file lokal saja
 	"github.com/tyler-smith/go-bip39"
 )
@@ -94,8 +95,7 @@ func (w *BVMWallet) SignAndPack(c *client.BVMClient, to string, amount uint64, s
     finalNonce := state.Nonce + ramCount
 
     // 3. RAKIT TRANSAKSI (Gunakan NewTransaction agar Timestamp terisi otomatis)
-    // Sesuai types/transaction.go: From, To, Amount, Fee, Symbol, Memo, Nonce, Params
-    tx := types.NewTransaction(w.Address, to, amount, info.DynamicFee, symbol, memo, finalNonce)
+    tx := types.NewTransaction(w.Address, to, amount, info.DynamicFee, symbol, memo, finalNonce, 1989, types.Params{})
 
     // 🚩 PENTING: Masukkan PublicKey SEBELUM hitung Hash
     tx.PublicKey = w.PublicKey
@@ -219,22 +219,21 @@ func GenerateMnemonic() (string, error) {
     return bip39.NewMnemonic(entropy)
 }
 
-// SignAndPackCustom: Menggunakan "pabrik" NewRegisterTransaction agar standar
+// ✅ FORMASI SULTAN MODERN (PILIHAN SINKRON & AMAN):
 func (w *BVMWallet) SignAndPackCustom(c *client.BVMClient, username string) (types.Transaction, error) {
     // 1. Ambil Info Jaringan & State Nonce
     info, err := c.GetNetworkInfo()
     if err != nil { return types.Transaction{}, err }
-    
+
     state, err := c.GetSecureState(w.Address)
     if err != nil { return types.Transaction{}, err }
 
-    // 2. RAKIT MENGGUNAKAN STANDAR SULTAN (Fungsi 3 di types/transaction.go)
-    // Fungsi ini otomatis mengisi: To="SYSTEM_AUTH", Type="user_register", Payload, dll.
-    tx := types.NewRegisterTransaction(w.Address, username, info.DynamicFee, state.Nonce)
+    // 2. RAKIT MENGGUNAKAN STANDAR SULTAN (6 Parameter Tepat Sasaran)
+    tx := types.NewRegisterTransaction(w.Address, username, info.DynamicFee, state.Nonce, 1989)
 
     // 3. Tambahkan Kunci Publik (Wajib untuk Verifikasi Signature di Kernel)
     tx.PublicKey = w.PublicKey
-    
+
     // Update ID karena ada tambahan PublicKey dalam perhitungan Hash
     tx.ID = tx.GenerateID()
 
@@ -275,4 +274,58 @@ func (w *BVMWallet) SignMessage(message string) (string, error) {
 
 	// 4. Kembalikan dalam format Hex string
 	return hex.EncodeToString(sig), nil
+}
+
+// SignBridgeOutTX: Khusus membuat paket pelintas dimensi
+func (w *BVMWallet) SignBridgeOutTX(c *client.BVMClient, vaultAddr string, memo string, amount uint64, symbol string) (types.Transaction, error) {
+    // 1. Ambil Nonce Lokal
+    nonce, err := c.GetNextNonce(w.Address)
+    if err != nil { return types.Transaction{}, err }
+
+    // 2. Ambil Info Jaringan
+    info, err := c.GetNetworkInfo()
+    chainID := uint64(1989)
+    fee := uint64(1000)
+    if err == nil {
+        chainID = info.ChainID
+        fee = info.DynamicFee
+    }
+
+    // 3. 🚀 STRATEGI KUDA TROYA: Gunakan cetakan asli dari Core!
+    // Memanggil NewTransaction sama persis seperti bvm wallet send
+    tx := types.NewTransaction(w.Address, vaultAddr, amount, fee, symbol, memo, nonce, chainID, types.Params{})
+
+    // 4. 🚀 OVERRIDE (Bajak tipe dan isinya menjadi Bridge)
+    tx.Type = "bridge_out"
+    
+    // Ekstrak Target Chain dari Memo
+    parts := strings.Split(memo, "|")
+    targetChain := "9999"
+    if len(parts) >= 2 {
+        targetChain = parts[1]
+    }
+    payloadStr := fmt.Sprintf(`{"target_chain_id":%s}`, targetChain)
+    tx.Payload = []byte(payloadStr) // Suntikkan Payload Bridge
+
+    // 5. UPDATE IDENTITAS: Inject Public Key dan Generate Ulang ID (PENTING!)
+    tx.PublicKey = w.PublicKey
+    tx.ID = tx.GenerateID() // Hash ulang ID karena Type & Payload baru saja kita ubah
+
+    // 6. TANDA TANGAN KRIPTOGRAFI
+    hashBytes, err := tx.CalculateHash()
+    if err != nil { return tx, err }
+
+    privBytes, _ := hex.DecodeString(w.PrivateKey)
+    rawPriv, err := x509.ParseECPrivateKey(privBytes)
+    if err != nil { return tx, err }
+
+    sig, err := ecdsa.SignASN1(rand.Reader, rawPriv, hashBytes)
+    if err != nil { return tx, err }
+
+    tx.Signature = hex.EncodeToString(sig)
+    
+    // 7. Update Nonce
+    w.Nonce = nonce + 1
+
+    return tx, nil
 }

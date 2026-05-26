@@ -10,6 +10,7 @@ import (
     authtypes    "github.com/aziskebanaran/bvm-core/x/auth/types" 
     storagetypes "github.com/aziskebanaran/bvm-core/x/storage/types"
     factorytypes "github.com/aziskebanaran/bvm-core/x/factory/types"
+    utxotypes "github.com/aziskebanaran/bvm-core/x/utxo/types"
 )
 
 // ParamsKeeper: Kontrak Konstitusi Ekonomi BVM
@@ -24,6 +25,8 @@ type ParamsKeeper interface {
 type BankKeeper    = banktypes.BankKeeper
 
 type AuthKeeper    = authtypes.AuthKeeper
+
+type UTXOKeeper    = utxotypes.UTXOKeeper
 
 type StakingKeeper = stakingtypes.StakingKeeper 
 
@@ -70,8 +73,17 @@ type StorageModuleKeeper interface {
     RegisterApp(owner string, appID string, rules map[string]interface{}) (string, error)
     SafePut(appID string, data storagetypes.UserData, callerAddr string) error
     CheckRules(app storagetypes.AppContainer, path string, action string, callerAddr string) bool
+    GetVaultList() []string
+    SetVaultList(newVaults []string) error
 }
 
+type BridgeKeeper interface {
+    IsAuthorizedRelayer(address string) bool
+    SetAuthorizedRelayers(relayers []string) error
+    VerifyRelayerSignature(payload []byte, signature string) bool // 🚩 Tambah ini
+    VerifySourceChainLock(refTxID string) bool                  // 🚩 Tambah ini
+    RecordLockProof(refTxID string) error
+}
 
 // BVMKeeper: Jenderal Lapangan (Kernel)
 type BVMKeeper interface {
@@ -80,7 +92,9 @@ type BVMKeeper interface {
     GetLastBlockHash() string
     GetLastHeight() int
     ProcessTransaction(tx types.Transaction) error
+    ProcessUTXOTransaction(tx types.Transaction) error
     GetSecureBalance(address string) (types.WalletState, bool)
+    GetSecureBalanceUTXO(address string) (types.WalletState, bool)
     SearchAccount(query string) (interface{}, bool)
     GetNextNonce(address string) uint64
     GetBlockByHeight(height uint64) (*types.Block, error)
@@ -120,7 +134,8 @@ type BVMKeeper interface {
     CommitBlock(block types.Block) error
 
 	//Reward
-    DistributeBlockReward(height int64, fees uint64, batch storage.Batch) (uint64, uint64, error)
+    DistributeBlockReward(height int64, minerAddress string, fees uint64, batch storage.Batch, pendingChanges map[string]int64) (uint64, uint64, error)
+
     GetSubsidiAtHeight(height int64, validatorCount int) uint64
 
     // 🚩 TAMBAHKAN INI agar API Sultan bisa memanggilnya:
@@ -157,6 +172,11 @@ type BVMKeeper interface {
     GetPendingTransactions() []types.Transaction
     GetFactory() FactoryKeeper
     GetCloudStorage() StorageModuleKeeper
+    GetUTXO() UTXOKeeper
+
+    UpdateActiveMiner(address string, timestamp int64)
+    GetActiveMiners() map[string]int64
+    DeleteActiveMiner(address string)
 }
 
 type FactoryKeeper interface {

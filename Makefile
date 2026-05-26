@@ -1,7 +1,7 @@
 # --- 👑 BVM COMMAND CENTER (BVM EDITION V2) ---
 BINARY_NAME=bvm
 # Jalur ke source utama Sultan
-CLI_SOURCES=./cmd/bvm/main.go ./cmd/bvm/node.go
+CLI_SOURCES=./cmd/bvm/main.go ./cmd/bvm/node.go ./cmd/bvm/admin.go ./cmd/bvm/sync.go
 WASM_OUT=contracts/test_contract/contract.wasm
 WASM_SRC=contracts/test_contract/main.go
 

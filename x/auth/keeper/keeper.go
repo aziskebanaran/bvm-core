@@ -50,6 +50,13 @@ func (a *AuthKeeper) VerifySignature(tx types.Transaction) bool {
 		return true
 	}
 
+       // 🚀 BYPASS KHUSUS PINTU KEDATANGAN IBC (BRIDGE IN)
+        // Transaksi bridge_in ditandatangani oleh Relayer (Nexus), BUKAN oleh User.
+        // Tanda tangan Relayer akan divalidasi oleh Modul Bridge khusus, jadi kita lewati di sini.
+        if tx.Type == "bridge_in" {
+            return true 
+        }
+
 	// 2. Ambil Public Key
 	pubKeyHex := tx.PublicKey
 	if pubKeyHex == "" {
@@ -111,20 +118,39 @@ func (a *AuthKeeper) verifyECDSAModern(tx types.Transaction, pubKeyHex string) b
 
 // VerifyTransaction: Pintu masuk untuk x/app
 func (a *AuthKeeper) VerifyTransaction(tx types.Transaction) bool {
-	// 1. Cek Tanda Tangan
-	if !a.VerifySignature(tx) {
-		return false
-	}
+        // 1. Cek Tanda Tangan
+        if !a.VerifySignature(tx) {
+                return false
+        }
 
-	// 2. Cek Nonce (PENTING: Validasi urutan di sini!)
-	expectedNonce := a.NonceMgr.GetNextNonce(tx.From)
-	if tx.Nonce != expectedNonce {
-		logger.Warning("AUTH", "Nonce Mismatch! Akun ", tx.From[:10], " Butuh: ", expectedNonce, " Dapat: ", tx.Nonce)
-		return false
-	}
+        // 🚀 PENGECUALIAN NONCE UNTUK RELAYER (BRIDGE IN)
+        if tx.Type == "bridge_in" {
+            return true 
+        }
 
-	return true
+        // 2. Cek Nonce (PENTING: Validasi urutan di sini!)
+        expectedNonce := a.NonceMgr.GetNextNonce(tx.From)
+        if tx.Nonce != expectedNonce {
+                logger.Warning("AUTH", "Nonce Mismatch! Akun ", tx.From[:10], " Butuh: ", expectedNonce, " Dapat: ", tx.Nonce)
+                return false
+        }
+
+        return true
 }
+
+
+// VerifyTransactionUTXO: KHUSUS UTXO-BASED (Jalur VIP '0x' / 'utxo_move')
+// Wilayah ini Merdeka Nonce total, keamanan murni bertumpu pada Tanda Tangan Kunci & Validitas Kepingan!
+func (a *AuthKeeper) VerifyTransactionUTXO(tx types.Transaction) bool {
+        // 1. Cek Kedaulatan Tanda Tangan UTXO 
+        if !a.VerifySignature(tx) {
+                return false
+        }
+
+        // Bypass Nonce total. Tidak ada pengecekan tx.Nonce == expectedNonce di sini!
+        return true
+}
+
 
 func (a *AuthKeeper) GetAccount(addr string) (types.Account, error) {
 	return types.Account{

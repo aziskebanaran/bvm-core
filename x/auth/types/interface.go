@@ -6,6 +6,7 @@ import "github.com/aziskebanaran/bvm-core/x/bvm/types"
 type AuthKeeper interface {
     // --- 1. Verifikasi ---
     VerifyTransaction(tx types.Transaction) bool
+    VerifyTransactionUTXO(tx types.Transaction) bool
     VerifySignature(tx types.Transaction) bool
 
     // --- 2. Identitas (Public Key) ---

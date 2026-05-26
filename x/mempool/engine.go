@@ -59,37 +59,36 @@ func (m *MempoolEngine) Add(tx types.Transaction) error {
     m.Mu.Lock()
     defer m.Mu.Unlock()
 
+    // 🚩 PINTU VIP: UTXO, Bridge In, dan Proof (Merdeka Nonce)
+    // Semua transaksi tipe ini diizinkan masuk tanpa interogasi Nonce
+    isVIP := (len(tx.From) > 2 && tx.From[:2] == "0x") || 
+             tx.Type == "utxo_move" || 
+             tx.Type == "bridge_in" || 
+             tx.Type == "submit_proof"
+
+    if isVIP {
+        m.replaceIfDuplicate(tx)
+        heap.Push(m.Queue, &tx)
+        return nil // 🚀 LANGSUNG LOLOS MASUK ANTRIAN BLOK!
+    }
+
+    // =========================================================================
+    // 🏦 JALUR AKUN BIASA (Account Based)
+    // =========================================================================
     actualNonceOnDisk := m.Keeper.GetNextNonce(tx.From)
 
-    // 🚩 SOLUSI OTOMATIS: Jika RAM (PendingNonces) nyangkut di 0 
-    // tapi Sultan kirim 0 dan gagal, kita beri "napas" buat kirim ulang.
     if lastNonce, ok := m.PendingNonces[tx.From]; ok {
-        // Jika Nonce yang di RAM sama dengan di Disk, 
-        // artinya transaksi sebelumnya di RAM mungkin "ZOMBIE" (nyangkut).
-        // Kita izinkan TIMEOUT atau OVERWRITE jika Signature-nya baru.
         if lastNonce < actualNonceOnDisk {
             delete(m.PendingNonces, tx.From)
         }
     }
 
-    // 🚩 JANGAN PAKAI <=, PAKAI < SAJA UNTUK DISK
     if tx.Nonce < actualNonceOnDisk {
         return fmt.Errorf("❌ NONCE EXPIRED")
     }
 
-    // 🚩 IZINKAN OVERWRITE JIKA SULTAN KIRIM ULANG NONCE YANG SAMA
-    // Selama transaksi tersebut belum masuk ke Blok.
-    // Ini gunanya kalau Sultan mau memperbaiki transaksi yang Signature-nya Invalid.
-    
-    // Hapus pengecekan 'tx.Nonce == lastNonce' yang bikin Sultan error terus.
-    // Kita ganti dengan logika pembaruan:
-    
     m.PendingNonces[tx.From] = tx.Nonce
-    
-    // Cari dan ganti transaksi lama di Queue jika Nonce-nya sama
-    // (Ini supaya tidak ada Duplicate di dalam Queue RAM)
-    m.replaceIfDuplicate(tx) 
-
+    m.replaceIfDuplicate(tx)
     heap.Push(m.Queue, &tx)
     return nil
 }
@@ -116,9 +115,14 @@ func (m *MempoolEngine) GetTransactions(limit int) []types.Transaction {
             break
         }
 
-        // Cek apakah transaksi ini sudah basi terhadap DB?
-        // Jika belum basi, berikan ke Miner.
-        if tx.Nonce >= m.Keeper.GetNextNonce(tx.From) {
+        // 🚩 PERLUASAN BYPASS VIP: Masukkan Bridge dan Proof ke area aman
+        isVIP := (len(tx.From) > 2 && tx.From[:2] == "0x") || 
+                 tx.Type == "utxo_move" || 
+                 tx.Type == "bridge_in" || 
+                 tx.Type == "submit_proof"
+
+        // 🚀 Jika VIP, langsung masukkan ke antrean pahat tanpa syarat Nonce
+        if isVIP || tx.Nonce >= m.Keeper.GetNextNonce(tx.From) {
             txs = append(txs, *tx)
             count++
         }
@@ -133,30 +137,36 @@ func (m *MempoolEngine) PullTransactions(limit int) []types.Transaction {
 
     var finalTxs []types.Transaction
 
-    // Selama antrean masih ada dan belum mencapai limit
     for m.Queue.Len() > 0 && len(finalTxs) < limit {
-        // Ambil transaksi dengan fee tertinggi (Heap Pop)
         tx := heap.Pop(m.Queue).(*types.Transaction)
 
-        // 🚩 DETEKSI KEBENARAN NONCE (Langsung ke Database)
+        // 🚩 BYPASS UTXO & BRIDGE UNTUK PULL ENGINE
+        isVIP := (len(tx.From) > 2 && tx.From[:2] == "0x") ||
+                 tx.Type == "utxo_move" ||
+                 tx.Type == "bridge_in" ||
+                 tx.Type == "submit_proof"
+
+        if isVIP {
+            finalTxs = append(finalTxs, *tx)
+            // Bridge/UTXO tidak memerlukan penghapusan dari PendingNonces
+            continue
+        }
+
+        // 🏦 JALUR ACCOUNT BIASA (KODE ASLI JENDERAL - AMAN)
         actualNonce := m.Keeper.GetNextNonce(tx.From)
 
         if tx.Nonce < actualNonce {
-            // Kasus: Sultan sudah kirim transaksi ini sebelumnya (Basi)
-            logger.Warning("MEMPOOL", fmt.Sprintf("🗑️  Membuang TX Basi %s (Nonce %d, Harusnya %d)", 
-                tx.ID[:8], tx.Nonce, actualNonce))
-            delete(m.PendingNonces, tx.From) // Bersihkan cache RAM
-            continue // Cari transaksi berikutnya, jangan kasih ke Miner
+            logger.Warning("MEMPOOL", fmt.Sprintf("🗑️  Membuang TX Basi %s (Nonce %d, Harusnya %d)", tx.ID[:8], tx.Nonce, actualNonce))
+
+            delete(m.PendingNonces, tx.From)
+            continue 
         }
 
         if tx.Nonce > actualNonce {
-            // Kasus: Ada transaksi yang lompat (Future Nonce)
-            // Kita simpan lagi ke dalam antrean (Push kembali)
             heap.Push(m.Queue, tx)
-            break // Berhenti ambil, karena urutan di depan ada yang bolong
+            break 
         }
 
-        // Jika lolos (tx.Nonce == actualNonce)
         finalTxs = append(finalTxs, *tx)
         delete(m.PendingNonces, tx.From)
     }

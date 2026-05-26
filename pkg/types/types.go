@@ -75,6 +75,7 @@ type Params struct {
 	UnbondingPeriod   int     `json:"unbonding_period"`
 	AutoStakePercent  float64 `json:"auto_stake_percent"`
 	L2_BatchThreshold int     `json:"l2_batch_threshold"`
+	ChainID           uint64  `json:"chain_id"`
 }
 
 // NetworkResponse: Struktur data gabungan untuk Miner & Wallet Sultan (Versi SDK)
@@ -87,4 +88,5 @@ type NetworkResponse struct {
 	DynamicFee  uint64  `json:"dynamic_fee"`
 	MempoolSize int     `json:"mempool_size"`
 	NetworkName string  `json:"network_name"`
+        ChainID     uint64  `json:"chain_id"`
 }

@@ -16,15 +16,17 @@ func NewRouter(k x.BVMKeeper, mp x.MempoolKeeper, store storage.BVMStore, nodeAd
 	// --- 1. JALUR MINING ---
 	mux.HandleFunc("/api/mine", HandleMine(k))
         mux.HandleFunc("/api/getwork", HandleGetWork(k))
+        mux.HandleFunc("/api/mempool/ping", HandleMempoolPing(k))
 
 	// --- 2. JALUR EKONOMI ---
-	// 🚩 PERHATIKAN: Kita tidak lagi mengoper 'bc' karena 'k' sudah punya akses ke sana
-	mux.HandleFunc("/api/send", HandleSend(k)) 
-	mux.HandleFunc("/api/balance", HandleBalance(k))
-	mux.HandleFunc("/api/account", HandleGetAccount(k))
+        mux.HandleFunc("/api/send", HandleSend(k))
+        mux.HandleFunc("/api/utxo/send", HandleUTXOSend(k))
+        mux.HandleFunc("/api/balance", HandleBalance(k))
+        mux.HandleFunc("/api/utxo/balance", HandleUTXOBalance(k)) // 🚩 JALUR BARU: UTXO RADAR
+	mux.HandleFunc("/api/utxo/list", HandleUTXOList(k))
+        mux.HandleFunc("/api/account", HandleGetAccount(k))
 	mux.HandleFunc("/api/mempool", HandleMempool(k))
 	mux.HandleFunc("/api/mempool/stats", HandleMempoolStats(k))
-
 	mux.HandleFunc("/api/nonce", HandleNonce(k))
 
 	// --- 3. INFORMASI JARINGAN ---
@@ -36,6 +38,7 @@ func NewRouter(k x.BVMKeeper, mp x.MempoolKeeper, store storage.BVMStore, nodeAd
 	// --- 4. EXPLORER & UTILITY ---
 	mux.HandleFunc("/api/history", HandleAddressHistory(store))
 	mux.HandleFunc("/api/holders", HandleHolders(k))
+        mux.HandleFunc("/api/utxo/holders", HandleUTXOHolders(k))
 	mux.HandleFunc("/api/search", HandleSearchUser(k))
 	mux.HandleFunc("/api/inspect", HandleInspect(nodeAddr))
         mux.HandleFunc("/api/events", HandleGetEvents)
@@ -43,7 +46,6 @@ func NewRouter(k x.BVMKeeper, mp x.MempoolKeeper, store storage.BVMStore, nodeAd
 
         // Untuk block, kita bisa ambil dari Keeper
 	mux.HandleFunc("/api/explorer/stream", HandleRealTimeExplorer(k))
-
 	mux.HandleFunc("/api/block/", HandleGetBlockByHeight(k))
 
 	// --- 6. TOKEN FACTORY (The Forge) ---
@@ -71,6 +73,7 @@ func NewRouter(k x.BVMKeeper, mp x.MempoolKeeper, store storage.BVMStore, nodeAd
         mux.HandleFunc("/api/app/register", HandleAppRegister(storageK, k))
         mux.Handle("/api/storage/put", authMiddleware(http.HandlerFunc(HandleAppPut(storageK, k))))
         mux.Handle("/api/storage/get", authMiddleware(http.HandlerFunc(HandleAppGet(storageK))))
+        mux.Handle("/api/admin/vaults", authMiddleware(http.HandlerFunc(HandleSetVaultList(storageK))))
 
         // --- 9. IDENTITY & AUTH SYSTEM ---
         mux.HandleFunc("/api/login", HandleLogin(k)) // Pintu masuk utama untuk JWT
@@ -82,6 +85,11 @@ func NewRouter(k x.BVMKeeper, mp x.MempoolKeeper, store storage.BVMStore, nodeAd
 	mux.HandleFunc("/api/nexus/sync-token", HandleSyncNexusToken(k))
 	mux.HandleFunc("/api/factory/register", HandleRegisterNexus(k)) // 🚩 Tambahkan Pintu Ini!
 
+        // 🚩 --- 11. BVM INTER-CHAIN COMMUNICATION (IBC-LITE) --- 🚩
+        // Pintu keberangkatan (User mengirim dari Core lokal ke dimensi lain)
+        mux.HandleFunc("/api/bridge/out", HandleBridgeOut(k))
+        // Pintu kedatangan (Relayer/Nexus mencetak koin dari dimensi lain ke Core lokal)
+        mux.HandleFunc("/api/bridge/in", HandleBridgeIn(k))
 
 	// --- 5. INFO NODE (Root API) ---
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
